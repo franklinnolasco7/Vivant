@@ -1,10 +1,11 @@
 /** Bootstraps the app shell and routes between library and reader views. */
 
-import * as api    from "./api.js";
-import * as ui     from "./ui.js";
-import * as lib    from "./library.js";
-import * as reader from "./reader.js";
-import * as search from "./search.js";
+import * as api      from "./api.js";
+import * as ui       from "./ui.js";
+import * as lib      from "./library.js";
+import * as reader   from "./reader.js";
+import * as search   from "./search.js";
+import * as bookinfo from "./bookinfo.js";
 
 // --- Build HTML shell ---
 
@@ -17,17 +18,30 @@ document.getElementById("app").innerHTML = `
   </div>
   <div style="flex:1"></div>
   <div class="theme-swatches">
-    <div class="swatch" data-theme="dark"  style="background:#111" title="Dark"></div>
-    <div class="swatch" data-theme="sepia" style="background:#f2e7ce" title="Sepia"></div>
-    <div class="swatch" data-theme="light" style="background:#f9f8f5;border:.5px solid rgba(0,0,0,.2)" title="Light"></div>
+    <button class="swatch-btn" data-theme="dark" title="Dark">Dark</button>
+    <button class="swatch-btn" data-theme="sepia" title="Sepia">Sepia</button>
+    <button class="swatch-btn" data-theme="light" title="Light">Light</button>
   </div>
   <div class="sep"></div>
   <button class="icon-btn icon-btn-search" id="btn-search" title="Search (Ctrl+F)">⌕</button>
   <div class="sep" id="sep-search"></div>
   <div class="win-controls">
-    <button class="win-btn"       id="btn-min"   title="Minimize">─</button>
-    <button class="win-btn"       id="btn-max"   title="Maximize">□</button>
-    <button class="win-btn close" id="btn-close" title="Close">✕</button>
+    <button class="win-btn" id="btn-min" title="Minimize" aria-label="Minimize">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="2" y1="5" x2="8" y2="5"/>
+      </svg>
+    </button>
+    <button class="win-btn" id="btn-max" title="Maximize" aria-label="Maximize">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="1" y="1" width="8" height="8"/>
+      </svg>
+    </button>
+    <button class="win-btn close" id="btn-close" title="Close" aria-label="Close">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="2" y1="2" x2="8" y2="8"/>
+        <line x1="8" y1="2" x2="2" y2="8"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -54,19 +68,14 @@ document.getElementById("app").innerHTML = `
   <!-- ── Library view ── -->
   <div id="view-library">
     <div class="library-header">
-      <div>
+      <div class="library-title-section">
         <div class="library-title">Your Library</div>
         <div class="library-meta" id="library-meta">Loading…</div>
       </div>
-      <button class="nav-btn" id="btn-sort">↕ Sort</button>
-    </div>
-
-    <div class="drop-zone" id="drop-zone">
-
-      <div class="drop-zone-icon">📚</div>
-      <div class="drop-zone-title">Drop EPUB files here</div>
-      <div class="drop-zone-sub">or click to browse your files</div>
-      <span class="drop-zone-btn">Import Books</span>
+      <div class="library-actions">
+        <button class="nav-btn" id="btn-sort" title="Change sort order">↕ Sort</button>
+        <button class="nav-btn" id="btn-import" title="Import EPUB files">+ Import</button>
+      </div>
     </div>
 
     <div class="book-grid" id="book-grid"></div>
@@ -82,7 +91,10 @@ document.getElementById("app").innerHTML = `
     <div class="reader-main">
       <div class="reader-topbar">
         <button class="icon-btn" id="btn-toc" title="Table of contents">☰</button>
-        <span class="reader-title" id="reader-title">—</span>
+        <div class="reader-title-stack" id="reader-title-stack">
+          <div class="reader-book-title" id="reader-book-title">—</div>
+          <div class="reader-chapter-title" id="reader-chapter-title">—</div>
+        </div>
         <button class="icon-btn" id="btn-ann" title="Annotations">✎</button>
       </div>
       <div class="reading-area" id="reading-area">
@@ -90,7 +102,7 @@ document.getElementById("app").innerHTML = `
       </div>
       <div class="reader-bottombar">
         <button class="nav-btn" id="btn-prev">← Prev</button>
-        <div class="reader-progress">
+        <div class="reader-progress" id="reader-progress">
           <div class="reader-progress-fill" id="reader-progress-fill" style="width:0%"></div>
         </div>
         <span class="pos-label" id="pos-label">—</span>
@@ -128,7 +140,13 @@ function updateSearchVisibility() {
   sep.style.display = visible ? "block" : "none";
 }
 
+function updateReaderActivity() {
+  reader.setActive?.(currentView === "reader" && hasActiveBook);
+}
+
 // --- Initialize modules ---
+
+bookinfo.init();
 
 lib.init({
   onOpen: async (book) => {
@@ -143,7 +161,7 @@ reader.init();
 
 // --- Wire global events ---
 
-document.querySelectorAll(".swatch").forEach((s) =>
+document.querySelectorAll(".swatch-btn").forEach((s) =>
   s.addEventListener("click", () => ui.applyTheme(s.dataset.theme))
 );
 
@@ -204,6 +222,7 @@ function switchView(view) {
       t.classList.toggle("active", t.dataset.view === view)
     );
     updateSearchVisibility();
+    updateReaderActivity();
   };
 
   if (wasReader && view !== "reader") {
@@ -224,3 +243,4 @@ function switchView(view) {
 
 lib.load();
 updateSearchVisibility();
+updateReaderActivity();
