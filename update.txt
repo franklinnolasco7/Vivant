@@ -1,0 +1,3 @@
+- new icons
+- B&W theme including images
+- UI enhancements

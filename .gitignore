@@ -23,3 +23,6 @@ src-tauri/target/
 # Runtime data
 data/
 *.db
+
+#Notes
+.txt

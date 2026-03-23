@@ -32,8 +32,7 @@ let sortIndex = 0;
 /** Initialize library interactions and handlers. */
 export function init({ onOpen }) {
   onOpenBook = onOpen;
-
-  updateSortButtonLabel(document.getElementById("btn-sort"));
+  initSortDropdown();
 
   const importBtn = document.getElementById("btn-import");
   importBtn.addEventListener("click", openFilePicker);
@@ -158,9 +157,8 @@ export async function load() {
 export function render() {
   const grid = document.getElementById("book-grid");
   const meta = document.getElementById("library-meta");
-  const sortBtn = document.getElementById("btn-sort");
 
-  updateSortButtonLabel(sortBtn);
+  syncSortDropdown();
   applySort();
 
   const inprog = books.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
@@ -227,22 +225,89 @@ export function render() {
   );
 }
 
-/** Cycle the active sort mode and re-render the grid. */
-export function toggleSort() {
-  sortIndex = (sortIndex + 1) % SORT_OPTIONS.length;
-  render();
-}
-
 function applySort() {
   const option = SORT_OPTIONS[sortIndex] || SORT_OPTIONS[0];
   books.sort(option.compare);
 }
 
-function updateSortButtonLabel(sortBtn) {
-  if (!sortBtn) return;
+function initSortDropdown() {
+  const dropdown = document.getElementById("sort-dropdown");
+  const trigger = document.getElementById("sort-trigger");
+  const menu = document.getElementById("sort-menu");
+
+  if (!dropdown || !trigger || !menu) return;
+
+  menu.innerHTML = SORT_OPTIONS
+    .map((opt, idx) => `
+      <button
+        class="sort-option"
+        type="button"
+        role="option"
+        data-index="${idx}"
+        aria-selected="false"
+      >Sort: ${esc(opt.label)}</button>`)
+    .join("");
+
+  const closeMenu = () => {
+    dropdown.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+  };
+
+  const openMenu = () => {
+    dropdown.classList.add("open");
+    trigger.setAttribute("aria-expanded", "true");
+  };
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (dropdown.classList.contains("open")) {
+      closeMenu();
+      return;
+    }
+    openMenu();
+  });
+
+  menu.addEventListener("click", (e) => {
+    const option = e.target.closest(".sort-option");
+    if (!option) return;
+    const nextIndex = Number.parseInt(option.dataset.index ?? "", 10);
+    if (!Number.isFinite(nextIndex) || nextIndex < 0 || nextIndex >= SORT_OPTIONS.length) {
+      return;
+    }
+    sortIndex = nextIndex;
+    closeMenu();
+    render();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!dropdown.contains(e.target)) {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeMenu();
+    }
+  });
+
+  syncSortDropdown();
+}
+
+function syncSortDropdown() {
+  const triggerLabel = document.getElementById("sort-trigger-label");
+  const menu = document.getElementById("sort-menu");
+  if (!triggerLabel || !menu) return;
+
   const option = SORT_OPTIONS[sortIndex] || SORT_OPTIONS[0];
-  sortBtn.textContent = `↕ ${option.label}`;
-  sortBtn.title = `Sort: ${option.label} (click to change)`;
+  triggerLabel.textContent = `Sort: ${option.label}`;
+
+  menu.querySelectorAll(".sort-option").forEach((btn) => {
+    const idx = Number.parseInt(btn.dataset.index ?? "", 10);
+    const active = idx === sortIndex;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
 }
 
 function cmpText(a, b) {

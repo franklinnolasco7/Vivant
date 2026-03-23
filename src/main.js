@@ -21,6 +21,7 @@ document.getElementById("app").innerHTML = `
     <button class="swatch-btn" data-theme="dark" title="Dark">Dark</button>
     <button class="swatch-btn" data-theme="sepia" title="Sepia">Sepia</button>
     <button class="swatch-btn" data-theme="light" title="Light">Light</button>
+    <button class="swatch-btn" data-theme="bw" title="B&W">B&W</button>
   </div>
   <div class="sep"></div>
   <button class="icon-btn icon-btn-search" id="btn-search" title="Search (Ctrl+F)">⌕</button>
@@ -50,7 +51,7 @@ document.getElementById("app").innerHTML = `
   <!-- Search overlay (shown over both views when active) -->
   <div class="search-overlay" id="search-overlay">
     <div class="search-row">
-      <span style="color:var(--t2);font-size:14px">⌕</span>
+      <span class="search-row-icon" aria-hidden="true">⌕</span>
       <input class="search-input" id="search-input" placeholder="Search in book…" autocomplete="off"/>
       <span class="search-count" id="search-count"></span>
       <span id="btn-search-close" style="cursor:pointer;color:var(--t2);font-size:18px;line-height:1" title="Close">×</span>
@@ -73,7 +74,20 @@ document.getElementById("app").innerHTML = `
         <div class="library-meta" id="library-meta">Loading…</div>
       </div>
       <div class="library-actions">
-        <button class="nav-btn" id="btn-sort" title="Change sort order">↕ Sort</button>
+        <div class="sort-dropdown" id="sort-dropdown">
+          <button
+            class="nav-btn sort-trigger"
+            id="sort-trigger"
+            title="Sort books"
+            aria-label="Sort books"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+          >
+            <span id="sort-trigger-label">Sort: Recent</span>
+            <span class="sort-trigger-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="sort-menu" id="sort-menu" role="listbox" aria-label="Sort options"></div>
+        </div>
         <button class="nav-btn" id="btn-import" title="Import EPUB files">+ Import</button>
       </div>
     </div>
@@ -132,6 +146,13 @@ let currentView = "library";
 let hasActiveBook = false;
 let pendingReaderFlush = Promise.resolve();
 
+function updateReadingTabAvailability() {
+  const readerTab = document.querySelector('.tab[data-view="reader"]');
+  if (!readerTab) return;
+  readerTab.classList.toggle("disabled", !hasActiveBook);
+  readerTab.setAttribute("aria-disabled", String(!hasActiveBook));
+}
+
 function updateSearchVisibility() {
   const btn = document.getElementById("btn-search");
   const sep = document.getElementById("sep-search");
@@ -152,6 +173,7 @@ lib.init({
   onOpen: async (book) => {
     await pendingReaderFlush;
     hasActiveBook = true;
+    updateReadingTabAvailability();
     switchView("reader");
     await reader.openBook(book);
   },
@@ -171,10 +193,6 @@ document.querySelectorAll(".tab").forEach((tab) =>
 
 document.getElementById("btn-search").addEventListener("click", () => {
   if (currentView === "reader" && hasActiveBook) reader.openSearch();
-});
-
-document.getElementById("btn-sort").addEventListener("click", () => {
-  lib.toggleSort();
 });
 
 // Window controls call backend commands because the title bar is custom.
@@ -212,6 +230,11 @@ window.addEventListener("beforeunload", () => {
 // --- Switch active view ---
 
 function switchView(view) {
+  if (view === "reader" && !hasActiveBook) {
+    ui.toast("Open a book first to start reading");
+    return;
+  }
+
   const wasReader = currentView === "reader";
   currentView = view;
 
@@ -242,5 +265,6 @@ function switchView(view) {
 // --- Bootstrap ---
 
 lib.load();
+updateReadingTabAvailability();
 updateSearchVisibility();
 updateReaderActivity();

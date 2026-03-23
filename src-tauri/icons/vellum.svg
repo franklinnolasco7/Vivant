@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="140 140 400 400">
+  <rect x="140" y="140" width="400" height="400" fill="#1a1208"/>
+  <polygon points="216,200  340,480  322,480  198,200" fill="#fdf6ec" opacity=".95"/>
+  <polygon points="228,200  340,480  319,480  210,200" fill="#f8f0e4" opacity=".88"/>
+  <polygon points="240,200  340,480  316,480  222,200" fill="#f2e8d8" opacity=".78"/>
+  <polygon points="252,200  340,480  313,480  234,200" fill="#ead8c4" opacity=".65"/>
+  <polygon points="264,200  340,480  310,480  246,200" fill="#dfc8b0" opacity=".52"/>
+  <polygon points="276,200  340,480  307,480  258,200" fill="#d0b898" opacity=".4"/>
+  <polygon points="192,200  216,200  322,480  298,480" fill="#c4875a"/>
+  <polygon points="464,200  340,480  358,480  482,200" fill="#fdf6ec" opacity=".95"/>
+  <polygon points="452,200  340,480  361,480  470,200" fill="#f8f0e4" opacity=".88"/>
+  <polygon points="440,200  340,480  364,480  458,200" fill="#f2e8d8" opacity=".78"/>
+  <polygon points="428,200  340,480  367,480  446,200" fill="#ead8c4" opacity=".65"/>
+  <polygon points="416,200  340,480  370,480  434,200" fill="#dfc8b0" opacity=".52"/>
+  <polygon points="404,200  340,480  373,480  422,200" fill="#d0b898" opacity=".4"/>
+  <polygon points="488,200  464,200  358,480  382,480" fill="#c4875a"/>
+</svg>

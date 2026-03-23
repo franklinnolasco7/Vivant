@@ -81,6 +81,7 @@ export function init() {
         <div class="bookinfo-overview-title">Book details</div>
         <table class="details-table">
           <tr><td>Publisher</td><td id="detail-publisher">-</td></tr>
+          <tr><td>Published</td><td id="detail-published">-</td></tr>
           <tr><td>Language</td><td id="detail-language">-</td></tr>
           <tr><td>File size</td><td id="detail-filesize">-</td></tr>
           <tr><td>Added</td><td id="detail-dateadded">-</td></tr>
@@ -204,6 +205,7 @@ function renderOverview(book, toc, progressChapter, progressPct) {
   description.innerHTML = formatDescriptionHtml(book.description);
 
   panel.querySelector("#detail-publisher").textContent = book.publisher || "-";
+  panel.querySelector("#detail-published").textContent = formatDate(book.published_at) || "-";
   panel.querySelector("#detail-language").textContent = book.language || "-";
   panel.querySelector("#detail-filesize").textContent = Number.isFinite(book.file_size)
     ? formatFileSize(book.file_size)

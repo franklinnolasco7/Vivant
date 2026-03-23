@@ -5,7 +5,7 @@
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
-const THEMES = ["dark", "sepia", "light"];
+const THEMES = ["dark", "sepia", "light", "bw"];
 
 export function applyTheme(theme) {
   if (!THEMES.includes(theme)) theme = "dark";

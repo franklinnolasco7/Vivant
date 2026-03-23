@@ -3,3 +3,7 @@
 - fix next scrolls buttons
 - custom categories
 - multiple ebook format support
+- library search
+- different reading layout like 2 column 3 column, original epub layout, etc.
+- focus mode
+- custom mouse cursor maybe just a dot pointer.

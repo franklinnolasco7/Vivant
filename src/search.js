@@ -68,7 +68,7 @@ async function runSearch(query) {
     countEl.textContent = results.length
       ? `${results.length} result${results.length !== 1 ? "s" : ""}`
       : "No results";
-    resultsEl.innerHTML = results.slice(0, 12).map((r) => {
+    resultsEl.innerHTML = results.map((r) => {
       const before = esc(r.snippet.slice(0, r.match_start));
       const match  = esc(r.snippet.slice(r.match_start, r.match_start + r.match_len));
       const after  = esc(r.snippet.slice(r.match_start + r.match_len));
