@@ -49,7 +49,7 @@ export function render() {
   count.textContent = annotations.length || "";
 
   if (!annotations.length) {
-    list.innerHTML = emptyState("✎", "No annotations yet", "Select text while reading to add notes");
+    list.innerHTML = emptyState("pencil", "No annotations yet", "Select text while reading to add notes");
     return;
   }
 
