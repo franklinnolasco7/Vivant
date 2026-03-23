@@ -23,12 +23,24 @@ let _suspendAutoPageUntil = 0;
 let _progressSaveQueue = Promise.resolve();
 let _lastWheelDownAt = 0;
 let _lastWheelUpAt = 0;
+let _edgePageIntentDir = 0;
+let _edgePageIntentCount = 0;
+let _edgePageIntentAt = 0;
+let _readerActive = false;
+let _readingTimeTimer = null;
+let _lastReadingTickAt = 0;
+let _pendingReadingSeconds = 0;
+let _readingTimeQueue = Promise.resolve();
 
 const AUTO_PAGE_THRESHOLD_PX = 56;
 const AUTO_PAGE_COOLDOWN_MS = 420;
 const AUTO_PAGE_WHEEL_INTENT_MS = 450;
 const PROGRESS_SAVE_DEBOUNCE_MS = 500;
 const RESUME_LOCATOR_STORAGE_KEY = "vellum.resume-locators.v1";
+const EDGE_PAGE_INTENT_WINDOW_MS = 1800;
+const EDGE_PAGE_INTENT_MIN_GAP_MS = 320;
+const READING_TIME_TICK_MS = 15000;
+const MAX_READING_TIME_STEP_SEC = 120;
 
 // --- Initialize reader interactions ---
 
@@ -38,6 +50,22 @@ export function init() {
 
   document.getElementById("btn-prev").addEventListener("click", prevChapter);
   document.getElementById("btn-next").addEventListener("click", nextChapter);
+
+  // Allow clicking progress bar for instant navigation rather than sequential scrolling
+  document.getElementById("reader-progress").addEventListener("click", (e) => {
+    if (!book || chapterTotal <= 1) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetChapter = Math.floor(pct * (chapterTotal - 1));
+    if (targetChapter !== chapterIdx) {
+      loadChapter(targetChapter, { scrollTarget: "top" });
+    } else {
+      // Scroll within chapter to avoid expensive chapter reload for same-chapter jumps
+      const readingArea = document.getElementById("reading-area");
+      readingArea.scrollTop = pct * (readingArea.scrollHeight - readingArea.clientHeight);
+    }
+  });
 
   // Debounce writes so frequent scroll events do not flood persistence.
   const readingArea = document.getElementById("reading-area");
@@ -62,13 +90,13 @@ export function init() {
     _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
   });
 
-  // Wheel intent preserves pagination even when short chapters have no scroll delta.
+  // Track wheel velocity to enable chapter flips for short chapters that don't scroll
   readingArea.addEventListener("wheel", (e) => {
     const now = Date.now();
     if (e.deltaY > 0) _lastWheelDownAt = now;
     if (e.deltaY < 0) _lastWheelUpAt = now;
 
-    // Keep wheel intent, but defer chapter flips until restore settles.
+    // Defer chapter flips until content restore settles to prevent accidental navigation
     if (now < _suspendAutoPageUntil) return;
     maybeAutoPageFromWheel(readingArea, e.deltaY);
   }, { passive: true });
@@ -78,11 +106,37 @@ export function init() {
   ann.init({ onJump: loadChapter });
 
   search.init({ onJump: loadChapter });
+
+  // Avoid counting time when app is backgrounded to measure genuine reading time
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      void flushReadingTime();
+      stopReadingTimer();
+      return;
+    }
+    if (_readerActive && book) startReadingTimer();
+  });
+}
+
+export function setActive(isActive) {
+  const next = Boolean(isActive);
+  if (_readerActive === next) return;
+
+  _readerActive = next;
+  if (_readerActive && book) {
+    startReadingTimer();
+    return;
+  }
+
+  void flushReadingTime().finally(() => stopReadingTimer());
 }
 
 // --- Open and restore a book ---
 
 export async function openBook(b) {
+  await flushReadingTime();
+  stopReadingTimer();
+
   book = b;
   chapterIdx = b.progress_chapter ?? 0;
   let restoreScrollPct = 0;
@@ -125,6 +179,8 @@ export async function openBook(b) {
     restoreScrollPct,
     restoreLocator,
   });
+
+  if (_readerActive) startReadingTimer();
 }
 
 
@@ -181,8 +237,8 @@ function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLo
     });
   });
 
-  document.getElementById("reader-title").textContent =
-    `${book.title} · ${ch.title}`;
+  document.getElementById("reader-book-title").textContent = book.title;
+  document.getElementById("reader-chapter-title").textContent = ch.title;
   document.getElementById("reader-progress-fill").style.width = pct + "%";
   document.getElementById("pos-label").textContent =
     `${ch.index + 1}/${chapterTotal} · ${pct}%`;
@@ -400,24 +456,35 @@ async function maybeAutoPage(readingArea, direction) {
   const hasRecentUpWheel = (now - _lastWheelUpAt) <= AUTO_PAGE_WHEEL_INTENT_MS;
 
   if (direction > 0 && nearBottom && hasRecentDownWheel && chapterIdx < chapterTotal - 1) {
+    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
+    if (!consumeEdgePageIntent(1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
     try {
       await loadChapter(chapterIdx + 1, { scrollTarget: "top" });
     } finally {
       _autoPaging = false;
+      resetEdgePageIntent();
     }
     return;
   }
 
   if (direction < 0 && nearTop && hasRecentUpWheel && chapterIdx > 0) {
+    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
+    if (!consumeEdgePageIntent(-1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
     try {
       await loadChapter(chapterIdx - 1, { scrollTarget: "bottom" });
     } finally {
       _autoPaging = false;
+      resetEdgePageIntent();
     }
+    return;
+  }
+
+  if ((direction > 0 && !nearBottom) || (direction < 0 && !nearTop)) {
+    resetEdgePageIntent();
   }
 }
 
@@ -432,25 +499,67 @@ async function maybeAutoPageFromWheel(readingArea, deltaY) {
   const noScrollableOverflow = readingArea.scrollHeight <= (readingArea.clientHeight + 1);
 
   if (deltaY > 0 && (nearBottom || noScrollableOverflow) && chapterIdx < chapterTotal - 1) {
+    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
+    if (!consumeEdgePageIntent(1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
     try {
       await loadChapter(chapterIdx + 1, { scrollTarget: "top" });
     } finally {
       _autoPaging = false;
+      resetEdgePageIntent();
     }
     return;
   }
 
   if (deltaY < 0 && (nearTop || noScrollableOverflow) && chapterIdx > 0) {
+    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
+    if (!consumeEdgePageIntent(-1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
     try {
       await loadChapter(chapterIdx - 1, { scrollTarget: "bottom" });
     } finally {
       _autoPaging = false;
+      resetEdgePageIntent();
     }
+    return;
   }
+
+  if ((deltaY > 0 && !nearBottom && !noScrollableOverflow)
+      || (deltaY < 0 && !nearTop && !noScrollableOverflow)) {
+    resetEdgePageIntent();
+  }
+}
+
+function consumeEdgePageIntent(direction) {
+  const now = Date.now();
+  const sameDirection = _edgePageIntentDir === direction;
+  const withinWindow = (now - _edgePageIntentAt) <= EDGE_PAGE_INTENT_WINDOW_MS;
+  const hasGap = (now - _edgePageIntentAt) >= EDGE_PAGE_INTENT_MIN_GAP_MS;
+
+  if (!sameDirection || !withinWindow) {
+    _edgePageIntentDir = direction;
+    _edgePageIntentCount = 1;
+    _edgePageIntentAt = now;
+    return false;
+  }
+
+  // Ignore repeated edge checks from the same momentum burst.
+  if (!hasGap) {
+    return false;
+  }
+
+  _edgePageIntentCount += 1;
+  _edgePageIntentAt = now;
+  if (_edgePageIntentCount < 2) return false;
+  return true;
+}
+
+function resetEdgePageIntent() {
+  _edgePageIntentDir = 0;
+  _edgePageIntentCount = 0;
+  _edgePageIntentAt = 0;
 }
 
 // --- TOC ---
@@ -628,6 +737,71 @@ async function persistProgress() {
 export async function flushProgress() {
   clearTimeout(_saveTimer);
   await persistProgress();
+  await flushReadingTime();
+}
+
+function startReadingTimer() {
+  stopReadingTimer();
+  _lastReadingTickAt = Date.now();
+  _readingTimeTimer = setInterval(() => {
+    void captureReadingTimeTick(false);
+  }, READING_TIME_TICK_MS);
+}
+
+function stopReadingTimer() {
+  if (_readingTimeTimer) {
+    clearInterval(_readingTimeTimer);
+    _readingTimeTimer = null;
+  }
+  _lastReadingTickAt = 0;
+}
+
+async function captureReadingTimeTick(force) {
+  if (!book) return;
+
+  const now = Date.now();
+  if (!_lastReadingTickAt) {
+    _lastReadingTickAt = now;
+    return;
+  }
+
+  let deltaSec = Math.floor((now - _lastReadingTickAt) / 1000);
+  _lastReadingTickAt = now;
+  if (deltaSec <= 0) return;
+
+  deltaSec = Math.min(deltaSec, MAX_READING_TIME_STEP_SEC);
+
+  if (!force) {
+    if (!_readerActive || document.visibilityState !== "visible") return;
+  }
+
+  _pendingReadingSeconds += deltaSec;
+  const shouldFlush = force || _pendingReadingSeconds >= 15;
+  if (!shouldFlush) return;
+
+  const secondsToSave = _pendingReadingSeconds;
+  _pendingReadingSeconds = 0;
+
+  const bookId = book.id;
+  _readingTimeQueue = _readingTimeQueue
+    .catch(() => {})
+    .then(async () => {
+      try {
+        await api.addReadingTime(bookId, secondsToSave);
+        if (book && book.id === bookId) {
+          book.reading_seconds = (Number(book.reading_seconds) || 0) + secondsToSave;
+        }
+      } catch {
+        if (book && book.id === bookId) {
+          _pendingReadingSeconds += secondsToSave;
+        }
+      }
+    });
+}
+
+async function flushReadingTime() {
+  await captureReadingTimeTick(true);
+  await _readingTimeQueue;
 }
 
 // --- Selection tooltip ---
