@@ -1,6 +1,9 @@
 /** Manages library state, rendering, import, deletion, and sort behavior. */
 import * as api from "./api.js";
+import * as bookinfo from "./bookinfo.js";
 import { esc, emptyState, fallbackCover, toast } from "./ui.js";
+
+let tauriDropUnlisten = null;
 
 let books = [];
 let onOpenBook = (_book) => {};
@@ -32,26 +35,88 @@ export function init({ onOpen }) {
 
   updateSortButtonLabel(document.getElementById("btn-sort"));
 
-  const dropZone = document.getElementById("drop-zone");
+  const importBtn = document.getElementById("btn-import");
+  importBtn.addEventListener("click", openFilePicker);
 
-  // Use the native picker to avoid hidden file input complexity in Tauri.
-  dropZone.addEventListener("click", openFilePicker);
+  const libView = document.getElementById("view-library");
+  let dragDepth = 0;
 
-  // Keep drag-and-drop import for quick batch imports from file managers.
-  dropZone.addEventListener("dragover", (e) => {
+  function resetDragState() {
+    dragDepth = 0;
+    libView.classList.remove("drag-over");
+  }
+
+  // Expand target area for drag-drop to meet Fitts's law for faster interaction
+  libView.addEventListener("dragover", (e) => {
     e.preventDefault();
-    dropZone.classList.add("drag-over");
+    dragDepth = Math.max(1, dragDepth);
+    libView.classList.add("drag-over");
   });
-  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-  dropZone.addEventListener("drop", (e) => {
+  libView.addEventListener("dragenter", (e) => {
     e.preventDefault();
-    dropZone.classList.remove("drag-over");
-    const paths = [...e.dataTransfer.files]
-      .filter((f) => f.name.endsWith(".epub"))
-      .map((f) => f.path)
-      .filter(Boolean);
+    dragDepth += 1;
+    libView.classList.add("drag-over");
+  });
+  libView.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) {
+      libView.classList.remove("drag-over");
+    }
+  });
+  libView.addEventListener("drop", (e) => {
+    e.preventDefault();
+    resetDragState();
+    const paths = normalizeEpubPaths(
+      [...(e.dataTransfer?.files ?? [])]
+        .map((f) => f.path)
+        .filter(Boolean)
+    );
     importPaths(paths);
   });
+
+  // Ensure hover state never remains after focus changes or aborted drags.
+  window.addEventListener("blur", resetDragState);
+  document.addEventListener("dragend", resetDragState);
+
+  // Listen for native OS drag-drop events in desktop context to support native file manager drops
+  setupTauriDropListener(libView, resetDragState);
+}
+
+async function setupTauriDropListener(libView, resetDragState) {
+  if (tauriDropUnlisten) return;
+
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    tauriDropUnlisten = await getCurrentWindow().onDragDropEvent((event) => {
+      const { type } = event.payload;
+
+      if (type === "enter" || type === "over") {
+        libView.classList.add("drag-over");
+        return;
+      }
+
+      if (type === "leave") {
+        resetDragState();
+        return;
+      }
+
+      if (type === "drop") {
+        resetDragState();
+        importPaths(normalizeEpubPaths(event.payload.paths));
+      }
+    });
+  } catch (_err) {
+    // Non-Tauri environments (tests/web preview) can rely on DOM drop events.
+  }
+}
+
+function normalizeEpubPaths(paths) {
+  return paths
+    .filter((path) => typeof path === "string")
+    .map((path) => path.trim())
+    .filter(Boolean)
+    .filter((path) => path.toLowerCase().endsWith(".epub"));
 }
 
 let _picking = false;
@@ -102,7 +167,7 @@ export function render() {
   meta.textContent = `${books.length} book${books.length !== 1 ? "s" : ""} · ${inprog} in progress`;
 
   if (!books.length) {
-    grid.innerHTML = emptyState("📖", "No books yet", "Import an EPUB to get started");
+    grid.innerHTML = emptyState("book", "No books yet", "Import an EPUB to get started");
     return;
   }
 
@@ -112,6 +177,12 @@ export function render() {
         ${b.cover_b64
           ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy"/>`
           : fallbackCover(b.title)}
+        <div class="book-cover-overlay">
+          <button class="overlay-btn play-btn" title="Open book" aria-label="Open book">
+            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="overlay-btn info-btn" title="Book details" aria-label="Book details">i</button>
+        </div>
       </div>
       <div class="book-title">${esc(b.title)}</div>
       <div class="book-author">${esc(b.author)}</div>
@@ -122,13 +193,27 @@ export function render() {
       <button class="delete-btn" data-book-id="${esc(b.id)}" title="Delete book">×</button>
     </div>`).join("");
 
-  grid.querySelectorAll(".book-card").forEach((card) =>
+  grid.querySelectorAll(".book-card").forEach((card) => {
+    const bookIdx = +card.dataset.index;
+    const playBtn = card.querySelector(".play-btn");
+    const infoBtn = card.querySelector(".info-btn");
+
     card.addEventListener("click", (e) => {
-      if (!e.target.classList.contains("delete-btn")) {
-        onOpenBook(books[+card.dataset.index]);
+      if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
+        onOpenBook(books[bookIdx]);
       }
-    })
-  );
+    });
+
+    playBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onOpenBook(books[bookIdx]);
+    });
+
+    infoBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showBookInfo(books[bookIdx]);
+    });
+  });
 
   // Use event-level stopPropagation so delete does not open the book.
   grid.querySelectorAll(".delete-btn").forEach((btn) =>
@@ -219,5 +304,27 @@ async function deleteBookItem(bookId) {
     toast("Book deleted");
   } catch (err) {
     toast(`Delete failed: ${err.message}`);
+  }
+}
+
+/** Gather data and show the book info panel. */
+async function showBookInfo(book) {
+  try {
+    const [toc, annotations, progress] = await Promise.all([
+      api.getToc(book.file_path),
+      api.getAnnotations(book.id),
+      api.getProgress(book.id),
+    ]);
+
+    if (!progress) {
+      toast("Open this book once first, then Book details will be available.");
+      return;
+    }
+
+    bookinfo.show(book, toc, annotations, progress, {
+      onContinue: () => onOpenBook(book),
+    });
+  } catch (err) {
+    toast(`Failed to load book info: ${err.message}`);
   }
 }
