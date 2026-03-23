@@ -68,6 +68,17 @@ pub fn migrate(pool: &DbPool) -> Result<()> {
         (2, "
             ALTER TABLE books ADD COLUMN chapter_count INTEGER NOT NULL DEFAULT 1;
         "),
+        (3, "
+            ALTER TABLE books ADD COLUMN genre TEXT;
+            ALTER TABLE books ADD COLUMN description TEXT;
+            ALTER TABLE books ADD COLUMN publisher TEXT;
+            ALTER TABLE books ADD COLUMN language TEXT;
+            ALTER TABLE books ADD COLUMN published_at TEXT;
+            ALTER TABLE books ADD COLUMN file_size INTEGER;
+        "),
+        (4, "
+            ALTER TABLE books ADD COLUMN reading_seconds INTEGER NOT NULL DEFAULT 0;
+        "),
     ];
 
     let now = chrono::Utc::now().to_rfc3339();
