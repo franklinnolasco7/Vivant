@@ -6,6 +6,7 @@ import { esc, emptyState, fallbackCover, toast } from "./ui.js";
 let tauriDropUnlisten = null;
 
 let books = [];
+let searchQuery = "";
 let onOpenBook = (_book) => {};
 
 const SORT_OPTIONS = [
@@ -27,6 +28,16 @@ const SORT_OPTIONS = [
   },
 ];
 
+/** Filter books by search query across title and author. */
+function filterBooks(booksArray, query) {
+  if (!query) return booksArray;
+  const q = query.toLowerCase();
+  return booksArray.filter((book) =>
+    book.title.toLowerCase().includes(q) ||
+    book.author.toLowerCase().includes(q)
+  );
+}
+
 let sortIndex = 0;
 
 /** Initialize library interactions and handlers. */
@@ -36,6 +47,14 @@ export function init({ onOpen }) {
 
   const importBtn = document.getElementById("btn-import");
   importBtn.addEventListener("click", openFilePicker);
+
+  const searchInput = document.getElementById("lib-search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      searchQuery = e.target.value.trim();
+      render();
+    });
+  }
 
   const libView = document.getElementById("view-library");
   let dragDepth = 0;
@@ -159,27 +178,37 @@ export function render() {
   const meta = document.getElementById("library-meta");
 
   syncSortDropdown();
-  applySort();
 
-  const inprog = books.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
-  meta.textContent = `${books.length} book${books.length !== 1 ? "s" : ""} · ${inprog} in progress`;
+  // Filter books based on search query
+  const filteredBooks = filterBooks(books, searchQuery);
+  applySort(filteredBooks);
 
-  if (!books.length) {
-    grid.innerHTML = emptyState("book", "No books yet", "Import an EPUB to get started");
+  const inprog = filteredBooks.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
+  meta.textContent = `${filteredBooks.length} book${filteredBooks.length !== 1 ? "s" : ""} · ${inprog} in progress`;
+
+  if (!filteredBooks.length) {
+    grid.innerHTML = emptyState("book", "No books yet", searchQuery ? "No books match your search" : "Import an EPUB to get started");
     return;
   }
 
-  grid.innerHTML = books.map((b, i) => `
-    <div class="book-card" data-index="${i}">
+  grid.innerHTML = filteredBooks.map((b, i) => `
+    <div class="book-card" data-book-id="${esc(b.id)}">
       <div class="book-cover">
         ${b.cover_b64
           ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy"/>`
           : fallbackCover(b.title)}
         <div class="book-cover-overlay">
           <button class="overlay-btn play-btn" title="Open book" aria-label="Open book">
-            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+              <polygon points="8,6 18,12 8,18"></polygon>
+            </svg>
           </button>
-          <button class="overlay-btn info-btn" title="Book details" aria-label="Book details">i</button>
+          <button class="overlay-btn info-btn" title="Book details" aria-label="Book details">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5.2" r="1.6"></circle>
+              <rect x="10.8" y="8.2" width="2.4" height="10.8" rx="1.2"></rect>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="book-title">${esc(b.title)}</div>
@@ -188,28 +217,36 @@ export function render() {
         <div class="progress-fill" style="width:${b.progress_pct}%"></div>
       </div>
       <div class="progress-label">${progressLabel(b)}</div>
-      <button class="delete-btn" data-book-id="${esc(b.id)}" title="Delete book">×</button>
+      <button class="delete-btn" data-book-id="${esc(b.id)}" title="Delete book" aria-label="Delete book">
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="3" x2="11" y2="11"></line>
+          <line x1="11" y1="3" x2="3" y2="11"></line>
+        </svg>
+      </button>
     </div>`).join("");
 
   grid.querySelectorAll(".book-card").forEach((card) => {
-    const bookIdx = +card.dataset.index;
+    const bookId = card.dataset.bookId;
+    const book = books.find(b => b.id === bookId);
+    if (!book) return;
+
     const playBtn = card.querySelector(".play-btn");
     const infoBtn = card.querySelector(".info-btn");
 
     card.addEventListener("click", (e) => {
       if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
-        onOpenBook(books[bookIdx]);
+        onOpenBook(book);
       }
     });
 
     playBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      onOpenBook(books[bookIdx]);
+      onOpenBook(book);
     });
 
     infoBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      showBookInfo(books[bookIdx]);
+      showBookInfo(book);
     });
   });
 
@@ -225,9 +262,9 @@ export function render() {
   );
 }
 
-function applySort() {
+function applySort(booksArray) {
   const option = SORT_OPTIONS[sortIndex] || SORT_OPTIONS[0];
-  books.sort(option.compare);
+  booksArray.sort(option.compare);
 }
 
 function initSortDropdown() {
@@ -324,17 +361,65 @@ function toMillis(value) {
 }
 
 async function confirmDeleteBook() {
-  try {
-    const { confirm } = await import("@tauri-apps/plugin-dialog");
-    return await confirm("Delete this book from your library?", {
-      title: "Delete Book",
-      kind: "warning",
-      okLabel: "Delete",
-      cancelLabel: "Cancel",
+  return showDeleteBookConfirm();
+}
+
+function showDeleteBookConfirm() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("delete-book-confirm");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "delete-book-confirm";
+    overlay.className = "external-link-confirm-backdrop";
+    overlay.innerHTML = `
+      <div class="external-link-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-book-confirm-title">
+        <div class="external-link-confirm-title" id="delete-book-confirm-title">Delete Book</div>
+        <div class="external-link-confirm-body">Delete this book from your library?</div>
+        <div class="external-link-confirm-actions">
+          <button class="nav-btn" type="button" data-action="delete">Delete</button>
+          <button class="nav-btn" type="button" data-action="cancel">Cancel</button>
+        </div>
+      </div>`;
+
+    const close = (approved) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.classList.remove("open");
+      setTimeout(() => {
+        overlay.remove();
+        resolve(approved);
+      }, 120);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(false);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        close(true);
+      }
+    };
+
+    overlay.addEventListener("click", (event) => {
+      const action = event.target?.closest?.("[data-action]")?.getAttribute("data-action");
+      if (action === "delete") {
+        close(true);
+        return;
+      }
+      if (action === "cancel" || event.target === overlay) {
+        close(false);
+      }
     });
-  } catch (_err) {
-    return window.confirm("Delete this book from your library?");
-  }
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+    document.addEventListener("keydown", onKeyDown, true);
+
+    const deleteBtn = overlay.querySelector('[data-action="delete"]');
+    deleteBtn?.focus();
+  });
 }
 
 async function importPaths(paths) {
@@ -363,10 +448,11 @@ function progressLabel(b) {
 }
 async function deleteBookItem(bookId) {
   try {
+    const book = books.find((b) => b.id === bookId);
     await api.deleteBook(bookId);
     books = books.filter((b) => b.id !== bookId);
     render();
-    toast("Book deleted");
+    toast(`"${book.title}" deleted`);
   } catch (err) {
     toast(`Delete failed: ${err.message}`);
   }

@@ -34,7 +34,12 @@ export function init() {
               <path d="M14 4l3 3"></path>
             </svg>
           </button>
-          <button class="bookinfo-btn bookinfo-btn-secondary" id="bookinfo-close-main" title="Close" aria-label="Close">X</button>
+          <button class="bookinfo-btn bookinfo-btn-secondary" id="bookinfo-close-main" title="Close" aria-label="Close">
+            <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <line x1="3" y1="3" x2="11" y2="11"></line>
+              <line x1="11" y1="3" x2="3" y2="11"></line>
+            </svg>
+          </button>
         </div>
       </div>
     </section>
