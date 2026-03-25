@@ -53,6 +53,22 @@ export const getToc = (filePath) => call("get_toc", { filePath });
 export const getChapter = (filePath, chapterIdx) =>
   call("get_chapter", { filePath, chapterIdx });
 
+/**
+ * Resolve an EPUB hyperlink against the current chapter.
+ * @param {string} filePath
+ * @param {number} currentChapterIdx
+ * @param {string} href
+ * @returns {Promise<LinkTarget|null>}
+ */
+export const resolveBookLink = (filePath, currentChapterIdx, href) =>
+  call("resolve_book_link", { filePath, currentChapterIdx, href });
+
+/**
+ * Open an external URL in the system default handler (browser/mail app/etc).
+ * @param {string} url
+ */
+export const openExternalUrl = (url) => call("open_external_url", { url });
+
 // --- Progress ---
 
 export const saveProgress = (bookId, chapterIdx, scrollPct) =>
@@ -112,6 +128,8 @@ export const windowClose    = () => call("window_close");
  * @typedef {{ label:string, chapter_idx:number, depth:number, anchor?:string|null }} TocEntry
  *
  * @typedef {{ index:number, title:string, html:string }} ChapterContent
+
+ * @typedef {{ chapter_idx:number, anchor?:string|null }} LinkTarget
  *
  * @typedef {{ id:string, book_id:string, chapter_idx:number,
  *             quote:string, note:string|null, color:string,

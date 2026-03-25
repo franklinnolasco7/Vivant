@@ -31,6 +31,23 @@ let _readingTimeTimer = null;
 let _lastReadingTickAt = 0;
 let _pendingReadingSeconds = 0;
 let _readingTimeQueue = Promise.resolve();
+let _skipExternalLinkConfirmForSession = false;
+let _progressDrag = null;
+let _progressWheelTargetChapter = null;
+let _progressWheelTimer = null;
+let _progressWheelCarry = 0;
+let _progressHoverRaf = 0;
+let _progressHoverClientX = 0;
+let _progressBarEl = null;
+let _progressTooltipEl = null;
+let _progressTooltipTitleEl = null;
+let _progressTooltipMetaEl = null;
+let _progressTooltipVisible = false;
+let _progressTooltipLastChapter = -1;
+let _progressTooltipLastPlacement = "";
+let _progressTooltipWidth = 0;
+let _progressTooltipHeight = 0;
+let _chapterTooltipTitles = [];
 
 const AUTO_PAGE_THRESHOLD_PX = 56;
 const AUTO_PAGE_COOLDOWN_MS = 420;
@@ -41,6 +58,8 @@ const EDGE_PAGE_INTENT_WINDOW_MS = 1800;
 const EDGE_PAGE_INTENT_MIN_GAP_MS = 320;
 const READING_TIME_TICK_MS = 15000;
 const MAX_READING_TIME_STEP_SEC = 120;
+const PROGRESS_WHEEL_STEP_THRESHOLD = 110;
+const PROGRESS_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
 
 // --- Initialize reader interactions ---
 
@@ -51,21 +70,21 @@ export function init() {
   document.getElementById("btn-prev").addEventListener("click", prevChapter);
   document.getElementById("btn-next").addEventListener("click", nextChapter);
 
-  // Allow clicking progress bar for instant navigation rather than sequential scrolling
-  document.getElementById("reader-progress").addEventListener("click", (e) => {
-    if (!book || chapterTotal <= 1) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, clickX / rect.width));
-    const targetChapter = Math.floor(pct * (chapterTotal - 1));
-    if (targetChapter !== chapterIdx) {
-      loadChapter(targetChapter, { scrollTarget: "top" });
-    } else {
-      // Scroll within chapter to avoid expensive chapter reload for same-chapter jumps
-      const readingArea = document.getElementById("reading-area");
-      readingArea.scrollTop = pct * (readingArea.scrollHeight - readingArea.clientHeight);
-    }
-  });
+  const progressBar = document.getElementById("reader-progress");
+  _progressBarEl = progressBar;
+  _progressTooltipEl = document.getElementById("reader-progress-tooltip");
+  _progressTooltipTitleEl = _progressTooltipEl?.querySelector(".reader-progress-tooltip-title") ?? null;
+  _progressTooltipMetaEl = _progressTooltipEl?.querySelector(".reader-progress-tooltip-meta") ?? null;
+  progressBar.addEventListener("pointerdown", onProgressPointerDown);
+  progressBar.addEventListener("pointermove", onProgressPointerMove);
+  progressBar.addEventListener("pointerup", onProgressPointerUp);
+  progressBar.addEventListener("pointercancel", onProgressPointerCancel);
+  progressBar.addEventListener("mousemove", onProgressHoverMove);
+  progressBar.addEventListener("mouseleave", onProgressHoverLeave);
+
+  // Make chapter seek easier: wheel anywhere on the reader bottom controls.
+  const readerBottomBar = document.querySelector(".reader-bottombar");
+  readerBottomBar?.addEventListener("wheel", onProgressWheel, { passive: false });
 
   // Debounce writes so frequent scroll events do not flood persistence.
   const readingArea = document.getElementById("reading-area");
@@ -116,6 +135,273 @@ export function init() {
     }
     if (_readerActive && book) startReadingTimer();
   });
+}
+
+function onProgressPointerDown(event) {
+  if (!book || event.button !== 0) return;
+
+  const progressBar = getProgressBarElement();
+  if (!progressBar) return;
+
+  clearProgressHoverFrame();
+  hideProgressTooltip(true);
+
+  const pct = progressPctFromClientX(progressBar, event.clientX);
+  _progressDrag = {
+    pointerId: event.pointerId,
+    moved: false,
+    pct,
+    startX: event.clientX,
+  };
+
+  progressBar.setPointerCapture(event.pointerId);
+  applyProgressPreview(pct);
+  event.preventDefault();
+}
+
+function onProgressPointerMove(event) {
+  if (!_progressDrag || _progressDrag.pointerId !== event.pointerId) return;
+
+  const progressBar = getProgressBarElement();
+  if (!progressBar) return;
+
+  const pct = progressPctFromClientX(progressBar, event.clientX);
+  _progressDrag.pct = pct;
+  _progressDrag.moved ||= Math.abs(event.clientX - _progressDrag.startX) >= 2;
+  applyProgressPreview(pct);
+}
+
+function onProgressPointerUp(event) {
+  if (!_progressDrag || _progressDrag.pointerId !== event.pointerId) return;
+
+  const progressBar = getProgressBarElement();
+  if (progressBar?.hasPointerCapture(event.pointerId)) {
+    progressBar.releasePointerCapture(event.pointerId);
+  }
+
+  const pct = _progressDrag.pct;
+  _progressDrag = null;
+  seekToProgressPct(pct);
+}
+
+function onProgressPointerCancel(event) {
+  if (!_progressDrag || _progressDrag.pointerId !== event.pointerId) return;
+
+  const progressBar = getProgressBarElement();
+  if (progressBar?.hasPointerCapture(event.pointerId)) {
+    progressBar.releasePointerCapture(event.pointerId);
+  }
+
+  _progressDrag = null;
+  updateProgressDisplay(chapterProgressPct(chapterIdx), chapterIdx);
+}
+
+function onProgressHoverMove(event) {
+  if (!book || _progressDrag) return;
+
+  _progressHoverClientX = event.clientX;
+  if (_progressHoverRaf) return;
+  _progressHoverRaf = requestAnimationFrame(() => {
+    _progressHoverRaf = 0;
+    showProgressTooltip(_progressHoverClientX);
+  });
+}
+
+function onProgressHoverLeave() {
+  clearProgressHoverFrame();
+  hideProgressTooltip();
+}
+
+function onProgressWheel(event) {
+  if (!book || chapterTotal <= 1) return;
+
+  event.preventDefault();
+  clearProgressHoverFrame();
+  hideProgressTooltip();
+
+  // Clamp to one chapter step per debounce window.
+  if (Number.isFinite(_progressWheelTargetChapter)) {
+    return;
+  }
+
+  const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? 18
+    : (event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 120 : 1);
+  _progressWheelCarry += event.deltaY * deltaScale;
+
+  const stepCount = Math.trunc(_progressWheelCarry / PROGRESS_WHEEL_STEP_THRESHOLD);
+  if (stepCount === 0) return;
+
+  _progressWheelCarry -= stepCount * PROGRESS_WHEEL_STEP_THRESHOLD;
+
+  const baseChapter = Number.isFinite(_progressWheelTargetChapter)
+    ? _progressWheelTargetChapter
+    : chapterIdx;
+  const targetChapter = clampChapterIndex(baseChapter + stepCount);
+  if (targetChapter === baseChapter) return;
+
+  _progressWheelTargetChapter = targetChapter;
+  updateProgressDisplay(chapterProgressPct(targetChapter), targetChapter);
+
+  clearTimeout(_progressWheelTimer);
+  _progressWheelTimer = setTimeout(() => {
+    const pendingTarget = _progressWheelTargetChapter;
+    _progressWheelTargetChapter = null;
+    _progressWheelTimer = null;
+
+    if (!Number.isFinite(pendingTarget) || pendingTarget === chapterIdx) {
+      updateProgressDisplay(chapterProgressPct(chapterIdx), chapterIdx);
+      return;
+    }
+
+    void loadChapter(pendingTarget, { scrollTarget: "top" });
+  }, 120);
+}
+
+function progressPctFromClientX(progressBar, clientX) {
+  const rect = progressBar.getBoundingClientRect();
+  if (rect.width <= 0) return 0;
+  const x = clientX - rect.left;
+  return clamp(x / rect.width, 0, 1);
+}
+
+function chapterIndexFromProgressPct(pct) {
+  if (chapterTotal <= 1) return chapterIdx;
+  const normalized = clamp(pct, 0, 1);
+  return clampChapterIndex(Math.floor(normalized * (chapterTotal - 1)));
+}
+
+function chapterProgressPct(idx) {
+  if (chapterTotal <= 1) return 10;
+  const clamped = clampChapterIndex(idx);
+  return Math.round((clamped / (chapterTotal - 1)) * 100);
+}
+
+function updateProgressDisplay(progressPct, chapterForLabel) {
+  const safeChapter = clampChapterIndex(chapterForLabel);
+  document.getElementById("reader-progress-fill").style.width = `${clamp(progressPct, 0, 100)}%`;
+  document.getElementById("pos-label").textContent = `${safeChapter + 1}/${chapterTotal} · ${Math.round(progressPct)}%`;
+}
+
+function applyProgressPreview(pct) {
+  if (!book) return;
+
+  const targetChapter = chapterIndexFromProgressPct(pct);
+  const progressPct = chapterProgressPct(targetChapter);
+  updateProgressDisplay(progressPct, targetChapter);
+}
+
+function seekToProgressPct(pct) {
+  if (!book) return;
+
+  const normalized = clamp(pct, 0, 1);
+  const targetChapter = chapterIndexFromProgressPct(normalized);
+
+  if (targetChapter !== chapterIdx) {
+    void loadChapter(targetChapter, { scrollTarget: "top" });
+    return;
+  }
+
+  // Scroll within chapter to avoid expensive chapter reload for same-chapter jumps.
+  const readingArea = document.getElementById("reading-area");
+  if (!readingArea) return;
+
+  readingArea.scrollTop = normalized * Math.max(0, readingArea.scrollHeight - readingArea.clientHeight);
+  scheduleProgressSave();
+  updateProgressDisplay(chapterProgressPct(chapterIdx), chapterIdx);
+}
+
+function clearProgressHoverFrame() {
+  if (!_progressHoverRaf) return;
+  cancelAnimationFrame(_progressHoverRaf);
+  _progressHoverRaf = 0;
+}
+
+function showProgressTooltip(clientX) {
+  if (!book || _progressDrag) return;
+
+  const progressBar = getProgressBarElement();
+  const tooltip = getProgressTooltipElement();
+  if (!progressBar || !tooltip || !_progressTooltipTitleEl || !_progressTooltipMetaEl) return;
+
+  const pct = progressPctFromClientX(progressBar, clientX);
+  const targetChapter = chapterIndexFromProgressPct(pct);
+  if (targetChapter !== _progressTooltipLastChapter) {
+    const chapterPct = chapterProgressPct(targetChapter);
+    _progressTooltipTitleEl.textContent = chapterTooltipTitle(targetChapter);
+    _progressTooltipMetaEl.textContent = `Chapter ${targetChapter + 1} of ${chapterTotal} · ${chapterPct}%`;
+    _progressTooltipLastChapter = targetChapter;
+    _progressTooltipWidth = 0;
+    _progressTooltipHeight = 0;
+  }
+
+  if (!_progressTooltipVisible) {
+    tooltip.classList.add("show");
+    tooltip.setAttribute("aria-hidden", "false");
+    _progressTooltipVisible = true;
+  }
+
+  if (_progressTooltipWidth <= 0 || _progressTooltipHeight <= 0) {
+    _progressTooltipWidth = tooltip.offsetWidth;
+    _progressTooltipHeight = tooltip.offsetHeight;
+  }
+
+  const barRect = progressBar.getBoundingClientRect();
+  const desiredCenter = clientX - barRect.left;
+  const minCenter = (PROGRESS_TOOLTIP_VIEWPORT_MARGIN_PX - barRect.left) + (_progressTooltipWidth / 2);
+  const maxCenter = (window.innerWidth - PROGRESS_TOOLTIP_VIEWPORT_MARGIN_PX - barRect.left) - (_progressTooltipWidth / 2);
+  const clampedCenter = clamp(desiredCenter, minCenter, maxCenter);
+  tooltip.style.left = `${clampedCenter}px`;
+
+  const aboveTop = barRect.top - _progressTooltipHeight - 10;
+  const placement = aboveTop < PROGRESS_TOOLTIP_VIEWPORT_MARGIN_PX ? "below" : "above";
+  if (placement !== _progressTooltipLastPlacement) {
+    tooltip.dataset.placement = placement;
+    _progressTooltipLastPlacement = placement;
+  }
+}
+
+function hideProgressTooltip(immediate = false) {
+  const tooltip = getProgressTooltipElement();
+  if (!tooltip) return;
+  if (_progressTooltipVisible || immediate) {
+    tooltip.classList.remove("show");
+    tooltip.setAttribute("aria-hidden", "true");
+  }
+  _progressTooltipVisible = false;
+  _progressTooltipLastChapter = -1;
+  _progressTooltipLastPlacement = "";
+}
+
+function chapterTooltipTitle(targetChapter) {
+  const label = _chapterTooltipTitles[targetChapter];
+  if (label) return label;
+  return `Chapter ${targetChapter + 1}`;
+}
+
+function getProgressBarElement() {
+  if (_progressBarEl?.isConnected) return _progressBarEl;
+  _progressBarEl = document.getElementById("reader-progress");
+  return _progressBarEl;
+}
+
+function getProgressTooltipElement() {
+  if (_progressTooltipEl?.isConnected) return _progressTooltipEl;
+  _progressTooltipEl = document.getElementById("reader-progress-tooltip");
+  _progressTooltipTitleEl = _progressTooltipEl?.querySelector(".reader-progress-tooltip-title") ?? null;
+  _progressTooltipMetaEl = _progressTooltipEl?.querySelector(".reader-progress-tooltip-meta") ?? null;
+  return _progressTooltipEl;
+}
+
+function rebuildChapterTooltipTitles() {
+  _chapterTooltipTitles = new Array(Math.max(0, chapterTotal)).fill("");
+  for (const entry of toc) {
+    const idx = Number(entry.chapter_idx);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= _chapterTooltipTitles.length) continue;
+    if (_chapterTooltipTitles[idx]) continue;
+    const label = String(entry.label || "").trim();
+    if (label) _chapterTooltipTitles[idx] = label;
+  }
 }
 
 export function setActive(isActive) {
@@ -171,6 +457,7 @@ export async function openBook(b) {
   }
 
   chapterIdx = clampChapterIndex(chapterIdx);
+  rebuildChapterTooltipTitles();
 
   renderToc();
   await ann.load(b.id);
@@ -197,13 +484,14 @@ export async function loadChapter(idx, opts = {}) {
   const restoreScrollPct = clamp(opts.restoreScrollPct ?? 0, 0, 1);
   const restoreLocator = opts.restoreLocator || null;
   const highlightQuery = (opts.highlightQuery ?? "").trim();
+  const anchorTarget = normalizeAnchorTarget(opts.anchorTarget ?? "");
 
   document.getElementById("chapter-content").innerHTML =
     `<div class="empty-state"><div class="empty-state-sub">Loading…</div></div>`;
 
   try {
     const ch = await api.getChapter(book.file_path, idx);
-    renderChapter(ch, scrollTarget, restoreScrollPct, restoreLocator, highlightQuery);
+    renderChapter(ch, scrollTarget, restoreScrollPct, restoreLocator, highlightQuery, anchorTarget);
   } catch (err) {
     document.getElementById("chapter-content").innerHTML = `
       <div class="empty-state">
@@ -213,15 +501,25 @@ export async function loadChapter(idx, opts = {}) {
   }
 }
 
-function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLocator = null, highlightQuery = "") {
-  const pct = chapterTotal <= 1
-    ? 10
-    : Math.round((ch.index / (chapterTotal - 1)) * 100);
+function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLocator = null, highlightQuery = "", anchorTarget = "") {
+  const pct = chapterProgressPct(ch.index);
+
+  clearProgressHoverFrame();
+  hideProgressTooltip(true);
+
+  _progressWheelTargetChapter = null;
+  _progressWheelCarry = 0;
+  if (_progressWheelTimer) {
+    clearTimeout(_progressWheelTimer);
+    _progressWheelTimer = null;
+  }
 
   document.getElementById("chapter-content").innerHTML = `
     <div class="chapter-num">Chapter ${ch.index + 1} of ${chapterTotal}</div>
     <div class="chapter-title">${esc(ch.title)}</div>
     <div class="chapter-body">${ch.html}</div>`;
+
+  attachChapterLinkHandler();
 
   convertLocalImageUrls();
 
@@ -239,9 +537,7 @@ function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLo
 
   document.getElementById("reader-book-title").textContent = book.title;
   document.getElementById("reader-chapter-title").textContent = ch.title;
-  document.getElementById("reader-progress-fill").style.width = pct + "%";
-  document.getElementById("pos-label").textContent =
-    `${ch.index + 1}/${chapterTotal} · ${pct}%`;
+  updateProgressDisplay(pct, ch.index);
   document.getElementById("btn-prev").disabled = ch.index === 0;
   document.getElementById("btn-next").disabled = ch.index >= chapterTotal - 1;
 
@@ -297,6 +593,10 @@ function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLo
     readingArea.scrollTop = 0;
   }
 
+  if (anchorTarget) {
+    queueAnchorScroll(anchorTarget);
+  }
+
   _lastScrollTop = readingArea.scrollTop;
 
   // Delay save after restore so persisted progress reflects final settled position.
@@ -319,6 +619,218 @@ function renderChapter(ch, scrollTarget = "top", restoreScrollPct = 0, restoreLo
       }
     });
   }
+}
+
+function attachChapterLinkHandler() {
+  const body = document.querySelector(".chapter-body");
+  if (!body) return;
+
+  body.addEventListener("click", (event) => {
+    void handleChapterLinkClick(event);
+  });
+}
+
+async function handleChapterLinkClick(event) {
+  if (!(event.target instanceof Element) || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  const link = event.target.closest("a[href]");
+  if (!link || !book) return;
+
+  const href = (link.getAttribute("href") || "").trim();
+  if (!href) return;
+
+  // Keep navigation inside the reader for EPUB-internal links.
+  if (isExternalHref(href)) {
+    event.preventDefault();
+
+    if (!isAllowedExternalHref(href)) {
+      toast("Blocked unsafe link");
+      return;
+    }
+
+    const approved = await confirmOpenExternalLink(href);
+    if (!approved) return;
+
+    try {
+      await api.openExternalUrl(href);
+    } catch (err) {
+      toast(`Could not open link: ${err.message}`);
+    }
+    return;
+  }
+
+  event.preventDefault();
+
+  try {
+    const target = await api.resolveBookLink(book.file_path, chapterIdx, href);
+    if (!target) {
+      toast("Link target not found");
+      return;
+    }
+
+    const targetChapter = clampChapterIndex(target.chapter_idx);
+    const targetAnchor = normalizeAnchorTarget(target.anchor ?? "");
+
+    if (targetChapter === chapterIdx) {
+      if (targetAnchor && scrollToAnchor(targetAnchor)) {
+        scheduleProgressSave();
+      }
+      return;
+    }
+
+    await loadChapter(targetChapter, {
+      scrollTarget: "top",
+      anchorTarget: targetAnchor,
+    });
+  } catch (err) {
+    toast(`Link navigation failed: ${err.message}`);
+  }
+}
+
+function isExternalHref(href) {
+  const value = String(href || "").trim().toLowerCase();
+  return /^(https?:|mailto:|tel:|javascript:|data:|file:)/.test(value);
+}
+
+function isAllowedExternalHref(href) {
+  const value = String(href || "").trim().toLowerCase();
+  return /^(https?:|mailto:|tel:)/.test(value);
+}
+
+async function confirmOpenExternalLink(href) {
+  const safeHref = String(href ?? "").trim();
+  if (_skipExternalLinkConfirmForSession) return true;
+  return showExternalLinkConfirm(safeHref);
+}
+
+function showExternalLinkConfirm(href) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("external-link-confirm");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "external-link-confirm";
+    overlay.className = "external-link-confirm-backdrop";
+    overlay.innerHTML = `
+      <div class="external-link-confirm" role="dialog" aria-modal="true" aria-labelledby="external-link-confirm-title">
+        <div class="external-link-confirm-title" id="external-link-confirm-title">Open External Link</div>
+        <div class="external-link-confirm-body">Open this link in your default browser?</div>
+        <input class="external-link-confirm-url" type="text" readonly value="${esc(href)}" />
+        <label class="external-link-confirm-session-opt">
+          <input class="external-link-confirm-session-checkbox" type="checkbox" data-role="skip-session" />
+          <span class="external-link-confirm-session-text">Don't ask again for this session</span>
+        </label>
+        <div class="external-link-confirm-actions">
+          <button class="nav-btn" type="button" data-action="open">Open</button>
+          <button class="nav-btn" type="button" data-action="cancel">Cancel</button>
+        </div>
+      </div>`;
+
+    const urlInput = overlay.querySelector(".external-link-confirm-url");
+    const skipSessionInput = overlay.querySelector('[data-role="skip-session"]');
+    const openBtn = overlay.querySelector('[data-action="open"]');
+
+    const close = (approved) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.classList.remove("open");
+      setTimeout(() => {
+        overlay.remove();
+        resolve(approved);
+      }, 120);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(false);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        close(true);
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        urlInput?.focus();
+        urlInput?.select();
+      }
+    };
+
+    overlay.addEventListener("click", (event) => {
+      const action = event.target?.closest?.("[data-action]")?.getAttribute("data-action");
+      if (action === "open") {
+        _skipExternalLinkConfirmForSession = Boolean(skipSessionInput?.checked);
+        close(true);
+        return;
+      }
+      if (action === "cancel" || event.target === overlay) {
+        close(false);
+      }
+    });
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+    document.addEventListener("keydown", onKeyDown, true);
+
+    openBtn?.focus();
+  });
+}
+
+function queueAnchorScroll(anchor) {
+  const normalized = normalizeAnchorTarget(anchor);
+  if (!normalized) return;
+
+  const attempt = () => {
+    if (scrollToAnchor(normalized)) {
+      scheduleProgressSave();
+      return true;
+    }
+    return false;
+  };
+
+  requestAnimationFrame(() => {
+    if (attempt()) return;
+    setTimeout(attempt, 180);
+    setTimeout(attempt, 520);
+  });
+}
+
+function scrollToAnchor(anchor) {
+  const target = findAnchorElement(anchor);
+  if (!target) return false;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  return true;
+}
+
+function findAnchorElement(anchor) {
+  const normalized = normalizeAnchorTarget(anchor);
+  if (!normalized) return null;
+
+  const directId = document.getElementById(normalized);
+  if (directId) return directId;
+
+  const escaped = normalized
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+
+  return document.querySelector(
+    `.chapter-body [id="${escaped}"], .chapter-body a[name="${escaped}"]`
+  );
+}
+
+function normalizeAnchorTarget(anchor) {
+  const raw = String(anchor ?? "").trim().replace(/^#/, "");
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function scheduleProgressSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
 }
 
 function flashSearchHit(query) {
@@ -687,7 +1199,11 @@ function renderTocNodes(nodes, level, activePath) {
     return `<div class="toc-group${shouldCollapse ? " collapsed" : ""}" data-depth="${level}">
       <div class="toc-group-header" data-depth="${level}">
         <button class="toc-group-toggle" data-group-id="${node.groupId}" aria-label="Toggle section" title="Toggle section">
-          <span class="toc-group-chevron">▾</span>
+          <span class="toc-group-chevron" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="2.5,4.5 6,8 9.5,4.5"></polyline>
+            </svg>
+          </span>
         </button>
         ${item}
       </div>

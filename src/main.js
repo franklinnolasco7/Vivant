@@ -24,7 +24,12 @@ document.getElementById("app").innerHTML = `
     <button class="swatch-btn" data-theme="bw" title="B&W">B&W</button>
   </div>
   <div class="sep"></div>
-  <button class="icon-btn icon-btn-search" id="btn-search" title="Search (Ctrl+F)">⌕</button>
+  <button class="icon-btn icon-btn-search" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5"/>
+      <line x1="10.5" y1="10.5" x2="14" y2="14"/>
+    </svg>
+  </button>
   <div class="sep" id="sep-search"></div>
   <div class="win-controls">
     <button class="win-btn" id="btn-min" title="Minimize" aria-label="Minimize">
@@ -51,10 +56,20 @@ document.getElementById("app").innerHTML = `
   <!-- Search overlay (shown over both views when active) -->
   <div class="search-overlay" id="search-overlay">
     <div class="search-row">
-      <span class="search-row-icon" aria-hidden="true">⌕</span>
+      <span class="search-row-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="7" cy="7" r="4.5"/>
+          <line x1="10.5" y1="10.5" x2="14" y2="14"/>
+        </svg>
+      </span>
       <input class="search-input" id="search-input" placeholder="Search in book…" autocomplete="off"/>
       <span class="search-count" id="search-count"></span>
-      <span id="btn-search-close" style="cursor:pointer;color:var(--t2);font-size:18px;line-height:1" title="Close">×</span>
+      <button class="search-close-btn" id="btn-search-close" title="Close" aria-label="Close search">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="3" x2="11" y2="11"/>
+          <line x1="11" y1="3" x2="3" y2="11"/>
+        </svg>
+      </button>
     </div>
     <div class="search-results" id="search-results"></div>
   </div>
@@ -63,7 +78,12 @@ document.getElementById("app").innerHTML = `
   <div class="selection-tooltip" id="sel-tooltip">
     <button class="sel-btn" id="sel-highlight">Highlight</button>
     <button class="sel-btn" id="sel-note">+ Note</button>
-    <button class="sel-btn" id="sel-cancel">×</button>
+    <button class="sel-btn" id="sel-cancel" aria-label="Cancel">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="3" x2="11" y2="11"/>
+        <line x1="11" y1="3" x2="3" y2="11"/>
+      </svg>
+    </button>
   </div>
 
   <!-- ── Library view ── -->
@@ -74,6 +94,21 @@ document.getElementById("app").innerHTML = `
         <div class="library-meta" id="library-meta">Loading…</div>
       </div>
       <div class="library-actions">
+        <div class="lib-search-container">
+          <input
+            class="lib-search-input"
+            id="lib-search-input"
+            type="text"
+            placeholder="Search library…"
+            autocomplete="off"
+          />
+          <span class="lib-search-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="7" cy="7" r="4.5"/>
+              <line x1="10.5" y1="10.5" x2="14" y2="14"/>
+            </svg>
+          </span>
+        </div>
         <div class="sort-dropdown" id="sort-dropdown">
           <button
             class="nav-btn sort-trigger"
@@ -84,7 +119,11 @@ document.getElementById("app").innerHTML = `
             aria-expanded="false"
           >
             <span id="sort-trigger-label">Sort: Recent</span>
-            <span class="sort-trigger-chevron" aria-hidden="true">▾</span>
+            <span class="sort-trigger-chevron" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2.5,4.5 6,8 9.5,4.5"/>
+              </svg>
+            </span>
           </button>
           <div class="sort-menu" id="sort-menu" role="listbox" aria-label="Sort options"></div>
         </div>
@@ -104,23 +143,48 @@ document.getElementById("app").innerHTML = `
 
     <div class="reader-main">
       <div class="reader-topbar">
-        <button class="icon-btn" id="btn-toc" title="Table of contents">☰</button>
+        <button class="icon-btn" id="btn-toc" title="Table of contents" aria-label="Table of contents">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="3" y1="4" x2="13" y2="4"/>
+            <line x1="3" y1="8" x2="13" y2="8"/>
+            <line x1="3" y1="12" x2="13" y2="12"/>
+          </svg>
+        </button>
         <div class="reader-title-stack" id="reader-title-stack">
           <div class="reader-book-title" id="reader-book-title">—</div>
           <div class="reader-chapter-title" id="reader-chapter-title">—</div>
         </div>
-        <button class="icon-btn" id="btn-ann" title="Annotations">✎</button>
+        <button class="icon-btn" id="btn-ann" title="Annotations" aria-label="Annotations">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.5 11.8L11.3 3a1.6 1.6 0 0 1 2.2 0l.5.5a1.6 1.6 0 0 1 0 2.2L5.2 14.5l-3 .6.3-3.3z"/>
+            <path d="M10.2 4.1l1.7 1.7"/>
+          </svg>
+        </button>
       </div>
       <div class="reading-area" id="reading-area">
         <div class="chapter-content" id="chapter-content"></div>
       </div>
       <div class="reader-bottombar">
-        <button class="nav-btn" id="btn-prev">← Prev</button>
+        <button class="nav-btn" id="btn-prev">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="7.5,2.5 4,6 7.5,9.5"/>
+          </svg>
+          Prev
+        </button>
         <div class="reader-progress" id="reader-progress">
           <div class="reader-progress-fill" id="reader-progress-fill" style="width:0%"></div>
+          <div class="reader-progress-tooltip" id="reader-progress-tooltip" aria-hidden="true">
+            <div class="reader-progress-tooltip-title"></div>
+            <div class="reader-progress-tooltip-meta"></div>
+          </div>
         </div>
         <span class="pos-label" id="pos-label">—</span>
-        <button class="nav-btn" id="btn-next">Next →</button>
+        <button class="nav-btn" id="btn-next">
+          Next
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="4.5,2.5 8,6 4.5,9.5"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -208,9 +272,18 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-    if (!(currentView === "reader" && hasActiveBook)) return;
     e.preventDefault();
-    reader.openSearch();
+
+    if (currentView === "library") {
+      const librarySearch = document.getElementById("lib-search-input");
+      librarySearch?.focus();
+      librarySearch?.select();
+      return;
+    }
+
+    if (currentView === "reader" && hasActiveBook) {
+      reader.openSearch();
+    }
     return;
   }
   if (!inInput && e.key === "ArrowRight") reader.loadChapter && document.getElementById("btn-next").click();
