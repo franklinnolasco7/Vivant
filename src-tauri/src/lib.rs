@@ -12,7 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .register_uri_scheme_protocol("epub", |_ctx, request| {
             let uri = request.uri().to_string();
             log::debug!("EPUB protocol request: {}", uri);
@@ -93,6 +93,8 @@ pub fn run() {
             commands::import_epub,
             commands::get_library,            commands::delete_book,            commands::get_chapter,
             commands::get_toc,
+            commands::resolve_book_link,
+            commands::open_external_url,
             commands::save_progress,
             commands::get_progress,
             commands::add_reading_time,

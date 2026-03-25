@@ -3,6 +3,8 @@ use crate::error::{Error, Result};
 use crate::{epub, library};
 use serde::Deserialize;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_opener::OpenerExt;
+use url::Url;
 
 // ── Import ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +83,31 @@ pub async fn get_chapter(
         .app_cache_dir()
         .map_err(|e| Error::Io(e.to_string()))?;
     epub::get_chapter_html_with_cache(std::path::Path::new(&file_path), chapter_idx, &cache_root)
+}
+
+#[tauri::command]
+pub async fn resolve_book_link(
+    file_path: String,
+    current_chapter_idx: usize,
+    href: String,
+) -> Result<Option<epub::LinkTarget>> {
+    epub::resolve_internal_link(std::path::Path::new(&file_path), current_chapter_idx, &href)
+}
+
+#[tauri::command]
+pub async fn open_external_url(app: AppHandle, url: String) -> Result<()> {
+    let trimmed = url.trim();
+    let parsed = Url::parse(trimmed)
+        .map_err(|_| Error::InvalidInput("invalid URL".into()))?;
+
+    let scheme = parsed.scheme().to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "http" | "https" | "mailto" | "tel") {
+        return Err(Error::InvalidInput("unsupported URL scheme".into()));
+    }
+
+    app.opener()
+        .open_url(parsed.as_str(), None::<&str>)
+        .map_err(|e| Error::Io(e.to_string()))
 }
 
 // ── Progress ──────────────────────────────────────────────────────────────────

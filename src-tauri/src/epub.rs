@@ -37,6 +37,12 @@ pub struct ChapterContent {
     pub html: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LinkTarget {
+    pub chapter_idx: usize,
+    pub anchor: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
     pub chapter_idx: usize,
@@ -243,6 +249,60 @@ pub fn search(path: &Path, query: &str) -> Result<Vec<SearchResult>> {
         }
     }
     Ok(results)
+}
+
+pub fn resolve_internal_link(path: &Path, current_chapter_idx: usize, href: &str) -> Result<Option<LinkTarget>> {
+    let trimmed = href.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if has_external_scheme(trimmed) {
+        return Ok(None);
+    }
+
+    let (target_path_raw, anchor_raw) = match trimmed.split_once('#') {
+        Some((p, a)) => (p.trim(), Some(a)),
+        None => (trimmed, None),
+    };
+
+    let anchor = anchor_raw
+        .map(|a| decode_fragment(a).trim().to_string())
+        .filter(|a| !a.is_empty());
+
+    let mut doc = open(path)?;
+    let total = doc.get_num_chapters();
+    if total == 0 {
+        return Ok(None);
+    }
+
+    let current_idx = current_chapter_idx.min(total.saturating_sub(1));
+
+    if target_path_raw.is_empty() {
+        return Ok(Some(LinkTarget {
+            chapter_idx: current_idx,
+            anchor,
+        }));
+    }
+
+    doc.set_current_chapter(current_idx);
+    let chapter_path = doc.get_current_path().unwrap_or_default();
+    let resolved = resolve_resource_path(&chapter_path, target_path_raw);
+
+    let resolved_buf = PathBuf::from(&resolved);
+    let raw_buf = PathBuf::from(target_path_raw);
+    let stripped = target_path_raw.trim_start_matches('/');
+    let stripped_buf = (stripped != target_path_raw).then(|| PathBuf::from(stripped));
+
+    let chapter_idx = doc
+        .resource_uri_to_chapter(&resolved_buf)
+        .or_else(|| doc.resource_uri_to_chapter(&raw_buf))
+        .or_else(|| stripped_buf.as_ref().and_then(|p| doc.resource_uri_to_chapter(p)));
+
+    Ok(chapter_idx.map(|idx| LinkTarget {
+        chapter_idx: idx.min(total.saturating_sub(1)),
+        anchor,
+    }))
 }
 
 /// Serve an image/font resource from inside the EPUB zip for the epub:// protocol.
@@ -455,6 +515,32 @@ fn detect_mime(data: &[u8]) -> &'static str {
 
 fn open(path: &Path) -> Result<EpubDoc<std::io::BufReader<std::fs::File>>> {
     EpubDoc::new(path).map_err(|e| Error::Epub(format!("{}: {e}", path.display())))
+}
+
+fn has_external_scheme(href: &str) -> bool {
+    let Some((scheme, _)) = href.split_once(':') else {
+        return false;
+    };
+    if scheme.is_empty() || scheme.len() == 1 {
+        return false;
+    }
+    let valid_scheme = scheme
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.');
+    if !valid_scheme {
+        return false;
+    }
+
+    matches!(
+        scheme.to_ascii_lowercase().as_str(),
+        "http" | "https" | "mailto" | "tel" | "javascript" | "data" | "file"
+    )
+}
+
+fn decode_fragment(fragment: &str) -> String {
+    urlencoding::decode(fragment)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|_| fragment.to_string())
 }
 
 fn stem(path: &Path) -> String {

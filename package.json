@@ -8,6 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build:linux": "tauri build --bundles deb,rpm",
+    "build:release": "npm run build && cargo build --release --manifest-path src-tauri/Cargo.toml",
+    "run:release": "./src-tauri/target/release/vellum",
+    "start:arch": "npm run build:release && npm run run:release",
     "test": "vitest run"
   },
   "dependencies": {
