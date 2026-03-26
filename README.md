@@ -55,7 +55,7 @@ rustup default stable
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourname/vellum
+git clone https://github.com/franklinnolasco7/Vellum.git
 cd vellum
 npm install
 npm run tauri dev
