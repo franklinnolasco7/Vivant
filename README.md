@@ -4,7 +4,7 @@
 
 # Vellum
 
-*Built for readers who care.*
+_Built for readers who care._
 
 A native Tauri e-reader for Linux.
 
@@ -27,11 +27,11 @@ A native Tauri e-reader for Linux.
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| Node.js | 18+ |
-| npm | 9+ |
-| Rust | stable |
+| Tool      | Version          |
+| --------- | ---------------- |
+| Node.js   | 18+              |
+| npm       | 9+               |
+| Rust      | stable           |
 | WebKitGTK | 6.0 dev packages |
 
 Install system dependencies for your distro:
@@ -65,13 +65,13 @@ npm run tauri dev
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start the frontend dev server |
-| `npm run build` | Build the frontend for production |
-| `npm run test` | Run the test suite |
-| `npm run tauri dev` | Launch the full Tauri app in dev mode |
-| `npm run tauri build` | Build a production Tauri binary |
+| Command               | Description                           |
+| --------------------- | ------------------------------------- |
+| `npm run dev`         | Start the frontend dev server         |
+| `npm run build`       | Build the frontend for production     |
+| `npm run test`        | Run the test suite                    |
+| `npm run tauri dev`   | Launch the full Tauri app in dev mode |
+| `npm run tauri build` | Build a production Tauri binary       |
 
 ---
 
@@ -91,4 +91,4 @@ Vellum stores your library database at:
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+GPL-3.0 — see [LICENSE](LICENSE) for details.
