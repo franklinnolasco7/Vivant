@@ -25,6 +25,12 @@ A native Tauri e-reader for Linux.
 
 ---
 
+## Status
+
+Vellum is in early development. Expect bugs and breaking changes.
+
+---
+
 ## Requirements
 
 | Tool      | Version          |
@@ -54,12 +60,26 @@ rustup default stable
 
 ## Quick Start
 
+### Option 1: Local setup
+
 ```bash
 git clone https://github.com/franklinnolasco7/Vellum.git
 cd vellum
 npm install
 npm run tauri dev
 ```
+
+### Option 2: Docker (optional)
+
+Docker is optional and provided for contributors who prefer a consistent, containerized development environment.
+
+```bash
+git clone https://github.com/franklinnolasco7/Vellum.git
+cd vellum
+./scripts/docker-shell.sh
+```
+
+For full Docker usage, see [DOCKER.md](DOCKER.md).
 
 ---
 
@@ -85,10 +105,6 @@ Vellum stores your library database at:
 
 ---
 
-⚠️ Vellum is in early development. Expect bugs and breaking changes.
-
----
-
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE) for details.
+Distributed under the GPL-3.0 License. See [LICENSE](LICENSE) for more information.
