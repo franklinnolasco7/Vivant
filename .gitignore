@@ -16,6 +16,7 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .DS_Store
+.docker/
 
 # Tauri / Rust build output
 src-tauri/target/

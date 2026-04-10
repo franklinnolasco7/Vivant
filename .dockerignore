@@ -1,0 +1,26 @@
+# Node / Vite
+node_modules
+dist
+build
+
+# Logs
+npm-debug.log
+*.log
+
+# Env files
+.env
+.env.local
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+
+# Tauri / Rust build output
+src-tauri/target/
+
+# Project Documentation / Git
+.git
+.gitignore
+README.md
+LICENSE

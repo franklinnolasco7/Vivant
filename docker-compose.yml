@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  vellum-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vellum-dev
+    volumes:
+      - .:/workspace
+      - cargo-cache:/home/developer/.cargo
+      - npm-cache:/home/developer/.npm
+    working_dir: /workspace
+    environment:
+      - NODE_ENV=development
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+volumes:
+  cargo-cache:
+  npm-cache:
