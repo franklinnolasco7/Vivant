@@ -8,15 +8,22 @@ services:
     container_name: vellum-dev
     volumes:
       - .:/workspace
-      - cargo-cache:/home/developer/.cargo
+      - cargo-registry-cache:/home/developer/.cargo/registry
+      - cargo-git-cache:/home/developer/.cargo/git
+      - target-cache:/workspace/src-tauri/target
       - npm-cache:/home/developer/.npm
+      # Required for UI rendering
+      - /tmp/.X11-unix:/tmp/.X11-unix
     working_dir: /workspace
     environment:
       - NODE_ENV=development
+      - DISPLAY=$DISPLAY
     command: /bin/bash
     stdin_open: true
     tty: true
 
 volumes:
-  cargo-cache:
+  cargo-registry-cache:
+  cargo-git-cache:
+  target-cache:
   npm-cache:
