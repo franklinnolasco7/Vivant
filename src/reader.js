@@ -952,26 +952,95 @@ function flashAnnotationHit(quote) {
   clearTimeout(_searchHighlightTimer);
   clearExistingSearchHighlight();
 
-  const normalizedQuote = normalizeAnnotationString(quote);
+  const q = quote.trim();
+  if (!q || q.length < 4) return false;
+
+  const { normalizedText, map, nodeIndex, textNodes } =
+    buildNormalizedTextMap(body, { stripPunct: true });
+
+  const normalizedQuote = normalizeAnnotationString(q);
   if (!normalizedQuote || normalizedQuote.length < 4) return false;
+  if (normalizedText.length < normalizedQuote.length) return false;
 
-  const { normalizedText, map, nodeIndex, textNodes } = buildNormalizedTextMap(body, { stripPunct: true });
-  if (!normalizedText || normalizedText.length < normalizedQuote.length) return false;
+  // Try full normalized quote first, then progressively shorten from end.
+  // Track exact matched length so end index uses what was found.
+  const MIN_SEARCH_LEN = Math.max(20, Math.floor(normalizedQuote.length * 0.5));
+  let matchIdx = -1;
+  let matchedLen = 0;
+  let searchQ = normalizedQuote;
 
-  const matchIdx = normalizedText.indexOf(normalizedQuote);
-  if (matchIdx < 0) return false;
+  while (searchQ.length >= MIN_SEARCH_LEN) {
+    const idx = normalizedText.indexOf(searchQ);
+    if (idx >= 0) {
+      matchIdx = idx;
+      matchedLen = searchQ.length;
+      break;
+    }
+
+    // Shorten by trimming to previous word boundary.
+    const lastSpace = searchQ.trimEnd().lastIndexOf(" ");
+    if (lastSpace < MIN_SEARCH_LEN) break;
+    searchQ = searchQ.slice(0, lastSpace).trimEnd();
+  }
+
+  if (matchIdx < 0 || matchedLen === 0) return false;
 
   const startInfo = map[matchIdx];
-  const endInfo = map[matchIdx + normalizedQuote.length - 1];
-  if (!startInfo || !endInfo) return false;
+  if (!startInfo) return false;
 
-  const endOffset = endInfo.offset + 1;
-  const spans = highlightTextRange(textNodes, nodeIndex, startInfo.node, startInfo.offset, endInfo.node, endOffset);
+  // Use matchedLen (actual hit), not normalizedQuote length, to avoid overshoot.
+  let endMapIdx = matchIdx + matchedLen - 1;
+
+  // Extend to include trailing chars normalization strips, if quote ends with them.
+  const originalEnd = q.trimEnd();
+  while (endMapIdx + 1 < map.length) {
+    const nextEntry = map[endMapIdx + 1];
+    const nextRawChar = nextEntry.node.nodeValue?.[nextEntry.offset] ?? "";
+
+    // Stop on real word characters beyond matched range.
+    if (/\w/.test(nextRawChar)) break;
+
+    // Only include stripped chars that are present at quote end.
+    const quoteEndsWithIt = originalEnd.endsWith(
+      (nextEntry.node.nodeValue || "").slice(
+        nextEntry.offset,
+        nextEntry.offset + 1
+      )
+    );
+    if (!quoteEndsWithIt) break;
+
+    endMapIdx++;
+  }
+
+  const endInfo = map[Math.min(endMapIdx, map.length - 1)];
+  if (!endInfo) return false;
+
+  // Validate: reconstructed text should overlap strongly with original quote
+  const matchedRaw = textNodes
+    .slice(nodeIndex.get(startInfo.node), nodeIndex.get(endInfo.node) + 1)
+    .map((n, i, arr) => {
+      const val = n.nodeValue || "";
+      if (arr.length === 1) return val.slice(startInfo.offset, endInfo.offset + 1);
+      if (i === 0) return val.slice(startInfo.offset);
+      if (i === arr.length - 1) return val.slice(0, endInfo.offset + 1);
+      return val;
+    })
+    .join("");
+
+  const matchedNorm = normalizeAnnotationString(matchedRaw);
+  const overlapRatio = longestCommonSubstring(matchedNorm, normalizedQuote) / normalizedQuote.length;
+  if (overlapRatio < 0.75) return false;
+
+  const spans = highlightTextRange(
+    textNodes, nodeIndex,
+    startInfo.node, startInfo.offset,
+    endInfo.node,   endInfo.offset + 1
+  );
   if (!spans.length) return false;
 
-  spans.forEach((span) => {
-    span.addEventListener("animationend", () => unwrapHighlight(span), { once: true });
-  });
+  spans.forEach(s =>
+    s.addEventListener("animationend", () => unwrapHighlight(s), { once: true })
+  );
   spans[0].scrollIntoView({ behavior: "smooth", block: "center" });
   return true;
 }
@@ -983,40 +1052,103 @@ function flashSearchHit(query) {
   clearTimeout(_searchHighlightTimer);
   clearExistingSearchHighlight();
 
-  const needles = buildHighlightNeedles(query);
-  if (!needles.length) return false;
+  const q = query.trim();
+  if (!q) return false;
 
-  const walker = document.createTreeWalker(
-    body,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode(node) {
-        const txt = node.nodeValue || "";
-        const parentTag = node.parentElement?.tagName;
-        if (parentTag === "SCRIPT" || parentTag === "STYLE") return NodeFilter.FILTER_REJECT;
-        return txt.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-      },
-    }
-  );
+  // Strategy 1: exact phrase match across the full normalized text map
+  // handles matches that span multiple text nodes (e.g. across <em>, <span>)
+  const { normalizedText, map, nodeIndex, textNodes } = buildNormalizedTextMap(body, { stripPunct: false });
+  const normalizedQ = normalizeSearchString(q);
 
-  let node;
-  while ((node = walker.nextNode())) {
-    const text = node.nodeValue || "";
-    const lower = text.toLocaleLowerCase();
-
-    for (const needle of needles) {
-      const idx = lower.indexOf(needle);
-      if (idx < 0) continue;
-
-      const span = wrapTextInNode(node, idx, idx + needle.length);
-      if (!span) continue;
-
-      span.addEventListener("animationend", () => unwrapHighlight(span), { once: true });
-      span.scrollIntoView({ behavior: "smooth", block: "center" });
-      return true;
+  if (normalizedQ.length >= 2) {
+    const matchIdx = normalizedText.indexOf(normalizedQ);
+    if (matchIdx >= 0) {
+      const startInfo = map[matchIdx];
+      const endInfo   = map[matchIdx + normalizedQ.length - 1];
+      if (startInfo && endInfo) {
+        const spans = highlightTextRange(
+          textNodes, nodeIndex,
+          startInfo.node, startInfo.offset,
+          endInfo.node,   endInfo.offset + 1
+        );
+        if (spans.length) {
+          spans.forEach(s => s.addEventListener("animationend", () => unwrapHighlight(s), { once: true }));
+          spans[0].scrollIntoView({ behavior: "smooth", block: "center" });
+          return true;
+        }
+      }
     }
   }
 
+  // Strategy 2: single text node match on the full query only, never tokens
+  const needle = q.toLocaleLowerCase();
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const tag = node.parentElement?.tagName;
+      if (tag === "SCRIPT" || tag === "STYLE") return NodeFilter.FILTER_REJECT;
+      return node.nodeValue?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  let node;
+  while ((node = walker.nextNode())) {
+    const lower = (node.nodeValue || "").toLocaleLowerCase();
+    const idx = lower.indexOf(needle);
+    if (idx < 0) continue;
+
+    const candidate = (node.nodeValue || "").slice(idx, idx + needle.length);
+    if (candidate.toLocaleLowerCase() !== needle) continue;
+
+    const span = wrapTextInNode(node, idx, idx + needle.length);
+    if (!span) continue;
+
+    span.addEventListener("animationend", () => unwrapHighlight(span), { once: true });
+    span.scrollIntoView({ behavior: "smooth", block: "center" });
+    return true;
+  }
+
+  return false;
+}
+
+function longestCommonSubstring(a, b) {
+  if (!a || !b) return 0;
+  let max = 0;
+  const dp = Array.from({ length: a.length + 1 }, () => new Int32Array(b.length + 1));
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+        if (dp[i][j] > max) max = dp[i][j];
+      }
+    }
+  }
+  return max;
+}
+
+// Block-level tags that the browser renders with an implicit line break,
+// meaning there is no space text node between them and adjacent content.
+const BLOCK_TAGS = new Set([
+  "ADDRESS","ARTICLE","ASIDE","BLOCKQUOTE","DD","DETAILS","DIALOG","DIV",
+  "DL","DT","FIELDSET","FIGCAPTION","FIGURE","FOOTER","FORM","H1","H2",
+  "H3","H4","H5","H6","HEADER","HGROUP","HR","LI","MAIN","NAV","OL",
+  "P","PRE","SECTION","SUMMARY","TABLE","UL","BR","TR","TD","TH",
+]);
+
+function isBlockElement(node) {
+  return node instanceof Element && BLOCK_TAGS.has(node.tagName);
+}
+
+// Returns true if there is at least one block-level ancestor boundary
+// between node a and node b (i.e. they live in different block boxes).
+function crossesBlockBoundary(a, b) {
+  if (!a || !b) return false;
+  let cur = b.parentNode;
+  while (cur) {
+    if (isBlockElement(cur)) {
+      return !cur.contains(a);
+    }
+    cur = cur.parentNode;
+  }
   return false;
 }
 
@@ -1046,8 +1178,23 @@ function buildNormalizedTextMap(root, { stripPunct = false } = {}) {
   let normalizedText = "";
   const map = [];
   let prevSpace = false;
+  let prevTextNode = null;
 
   for (const textNode of textNodes) {
+    // Inject a space when crossing a block boundary so that
+    // "HeadingText" and "Paragraph text" are separated in normalizedText,
+    // matching what a real browser selection string contains.
+    if (prevTextNode && crossesBlockBoundary(prevTextNode, textNode)) {
+      if (!prevSpace && normalizedText.length > 0) {
+        normalizedText += " ";
+        // Use the first char of this textNode as the sentinel map entry
+        // so the space resolves to a real position in the DOM.
+        map.push({ node: textNode, offset: 0, synthetic: true });
+        prevSpace = true;
+      }
+    }
+    prevTextNode = textNode;
+
     const text = textNode.nodeValue || "";
     for (let i = 0; i < text.length; i++) {
       let ch = normalizeMatchChar(text[i], { stripPunct });
@@ -1150,19 +1297,7 @@ function highlightTextRange(textNodes, nodeIndex, startNode, startOffset, endNod
 
 function buildHighlightNeedles(query) {
   const q = (query || "").trim().toLocaleLowerCase();
-  if (!q) return [];
-
-  const needles = [q];
-  const tokens = q
-    .split(/\s+/)
-    .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
-    .filter((t) => t.length >= 3)
-    .sort((a, b) => b.length - a.length);
-
-  for (const tok of tokens) {
-    if (!needles.includes(tok)) needles.push(tok);
-  }
-  return needles;
+  return q ? [q] : [];
 }
 
 function wrapTextInNode(textNode, start, end) {
