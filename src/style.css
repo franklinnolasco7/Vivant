@@ -2307,6 +2307,14 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.reading-area::-webkit-scrollbar-corner {
+  background: var(--b0);
+}
+
 ::-webkit-scrollbar-thumb {
   background: var(--t2);
   border-radius: 999px;
