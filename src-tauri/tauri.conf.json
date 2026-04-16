@@ -16,12 +16,12 @@
       "deb": {
         "depends": ["libwebkitgtk-6.0-0"],
         "files": {
-          "usr/share/applications/dev.vellum.reader.desktop": "../assets/vellum.desktop"
+          "usr/share/applications/dev.vellum.reader.desktop": "assets/vellum.desktop"
         }
       },
       "rpm": {
         "files": {
-          "usr/share/applications/dev.vellum.reader.desktop": "../assets/vellum.desktop"
+          "usr/share/applications/dev.vellum.reader.desktop": "assets/vellum.desktop"
         }
       },
       "appimage": {
