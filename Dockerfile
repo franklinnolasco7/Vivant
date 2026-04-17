@@ -1,4 +1,4 @@
-# Development environment for Vellum
+# Development environment for Vivant
 FROM ubuntu:22.04
 
 # Install system dependencies

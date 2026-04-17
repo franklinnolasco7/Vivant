@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  vellum-dev:
+  vivant-dev:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: vellum-dev
+    container_name: vivant-dev
     volumes:
       - .:/workspace
       - cargo-registry-cache:/home/developer/.cargo/registry

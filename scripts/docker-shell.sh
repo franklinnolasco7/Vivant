@@ -11,5 +11,5 @@ else
   exit 1
 fi
 
-"${compose_cmd[@]}" up -d vellum-dev
-"${compose_cmd[@]}" exec vellum-dev bash
+"${compose_cmd[@]}" up -d vivant-dev
+"${compose_cmd[@]}" exec vivant-dev bash

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img width="120" height="120" alt="vellum logo" src="https://github.com/user-attachments/assets/91b5141d-0e76-46cf-a5f0-c4ceba335bc3" />
+<img width="120" height="120" alt="vivant logo" src="https://github.com/user-attachments/assets/91b5141d-0e76-46cf-a5f0-c4ceba335bc3" />
 
-# Vellum
+# Vivant
 
 _Built for readers who care._
 
@@ -15,11 +15,11 @@ A native Tauri e-reader for Linux.
 
 ---
 
-<img src="https://github.com/user-attachments/assets/e642b466-7cfd-4d8a-977c-59ebca0d05ad" alt="Vellum Screenshot — Library View" width="90%" />
+<img src="https://github.com/user-attachments/assets/e642b466-7cfd-4d8a-977c-59ebca0d05ad" alt="Vivant Screenshot — Library View" width="90%" />
 
 <br/>
 
-<img src="https://github.com/user-attachments/assets/6df63185-783f-4ddd-ac43-9b20b82f1eb8" alt="Vellum Screenshot — Reading View" width="90%" />
+<img src="https://github.com/user-attachments/assets/6df63185-783f-4ddd-ac43-9b20b82f1eb8" alt="Vivant Screenshot — Reading View" width="90%" />
 
 </div>
 
@@ -27,7 +27,7 @@ A native Tauri e-reader for Linux.
 
 ## Status
 
-Vellum is in early development. Expect bugs and breaking changes.
+Vivant is in early development. Expect bugs and breaking changes.
 
 ---
 
@@ -63,8 +63,8 @@ rustup default stable
 ### Option 1: Local setup
 
 ```bash
-git clone https://github.com/franklinnolasco7/Vellum.git
-cd vellum
+git clone https://github.com/franklinnolasco7/Vivant.git
+cd vivant
 npm install
 npm run tauri dev
 ```
@@ -74,8 +74,8 @@ npm run tauri dev
 Docker is optional and provided for contributors who prefer a consistent, containerized development environment.
 
 ```bash
-git clone https://github.com/franklinnolasco7/Vellum.git
-cd vellum
+git clone https://github.com/franklinnolasco7/Vivant.git
+cd vivant
 ./scripts/docker-shell.sh
 ```
 
@@ -97,10 +97,10 @@ For full Docker usage, see [DOCKER.md](DOCKER.md).
 
 ## Data
 
-Vellum stores your library database at:
+Vivant stores your library database at:
 
 ```
-~/.local/share/dev.vellum.reader/vellum.db
+~/.local/share/dev.vivant.reader/vivant.db
 ```
 
 ---

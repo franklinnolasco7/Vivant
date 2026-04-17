@@ -1,4 +1,4 @@
-# Docker Setup for Vellum
+# Docker Setup for Vivant
 
 This Docker configuration provides a development environment with Node.js and Rust pre-installed.
 Docker is optional and intended for contributors who want a consistent environment.
@@ -24,7 +24,7 @@ docker compose up -d
 Enter the container:
 
 ```bash
-docker compose exec vellum-dev bash
+docker compose exec vivant-dev bash
 ```
 
 Stop the container:
@@ -38,13 +38,13 @@ docker compose down
 Build the image:
 
 ```bash
-docker build -t vellum-dev .
+docker build -t vivant-dev .
 ```
 
 Run the container:
 
 ```bash
-docker run -it -v $(pwd):/workspace vellum-dev bash
+docker run -it -v $(pwd):/workspace vivant-dev bash
 ```
 
 ## Inside the Container
