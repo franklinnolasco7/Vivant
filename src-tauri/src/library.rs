@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn add_book_then_list_library() {
         let pool = mem_pool();
-        let file_path = "/tmp/vellum-test-book.epub";
+        let file_path = "/tmp/vivant-test-book.epub";
 
         let id = add_book(
             &pool,
@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn save_progress_then_read_progress() {
         let pool = mem_pool();
-        let file_path = "/tmp/vellum-progress-book.epub";
+        let file_path = "/tmp/vivant-progress-book.epub";
 
         let id = add_book(
             &pool,

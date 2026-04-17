@@ -203,7 +203,7 @@ pub fn get_chapter_html_with_cache(
 
 pub fn ensure_extracted(epub_path: &Path, cache_root: &Path) -> Result<PathBuf> {
     let cache_dir = cache_dir_for_book(epub_path, cache_root);
-    let marker = cache_dir.join(".vellum-source");
+    let marker = cache_dir.join(".vivant-source");
     let fingerprint = source_fingerprint(epub_path)?;
 
     if cache_dir.exists() {

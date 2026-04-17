@@ -107,5 +107,5 @@ pub fn run() {
             commands::window_close,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Vellum");
+        .expect("error while running Vivant");
 }

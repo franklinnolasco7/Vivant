@@ -7,7 +7,7 @@ use std::path::Path;
 pub type DbPool = Pool<SqliteConnectionManager>;
 
 pub fn init(app_dir: &Path) -> Result<DbPool> {
-    let manager = SqliteConnectionManager::file(app_dir.join("vellum.db"))
+    let manager = SqliteConnectionManager::file(app_dir.join("vivant.db"))
         .with_init(|conn| {
             conn.execute_batch("
                 PRAGMA journal_mode = WAL;

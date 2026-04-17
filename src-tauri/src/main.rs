@@ -10,6 +10,7 @@ use tauri::Manager;
 
 #[tokio::main]
 async fn main() {
+    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     env_logger::init();
 
     tauri::Builder::default()
@@ -102,5 +103,5 @@ async fn main() {
             commands::window_close,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Vellum");
+        .expect("error while running Vivant");
 }
