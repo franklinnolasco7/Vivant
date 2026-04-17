@@ -11,7 +11,7 @@ import * as bookinfo from "./bookinfo.js";
 
 document.getElementById("app").innerHTML = `
 <div id="titlebar">
-  <span class="app-name">VELLUM</span>
+  <span class="app-name">VIVANT</span>
   <div class="tabs">
     <div class="tab active" data-view="library">Library</div>
     <div class="tab" data-view="reader">Reading</div>

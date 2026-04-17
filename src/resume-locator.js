@@ -1,4 +1,4 @@
-const RESUME_LOCATOR_STORAGE_KEY = "vellum.resume-locators.v1";
+const RESUME_LOCATOR_STORAGE_KEY = "vivant.resume-locators.v1";
 
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
