@@ -20,3 +20,5 @@ data/
 *.db
 
 .agents/
+
+.github/prompts/
