@@ -22,4 +22,4 @@ src-tauri/target/
 LICENSE
 
 .agents
-.github/prompts/*
+.github/prompts
