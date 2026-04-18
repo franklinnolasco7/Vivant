@@ -126,7 +126,7 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
 
     walk(&toc_items, &doc, &spine_ids, total, &mut out, 0);
 
-    // Keep first label for a chapter if multiple nav points target the same spine item.
+    // Dedup nav labels per spine.
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
     for e in out {
@@ -135,7 +135,7 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
         }
     }
 
-    // Merge user-provided nav labels with guaranteed spine coverage.
+    // Merge custom nav with full spine coverage.
     let mut merged: BTreeMap<usize, TocEntry> = BTreeMap::new();
     for e in deduped {
         merged.entry(e.chapter_idx).or_insert(e);
@@ -187,7 +187,6 @@ pub fn get_chapter_html_with_cache(
     let html = strip_chrome(&raw);
     let html = rewrite_img_srcs(html, &chapter_path, &extracted_root);
 
-    // Log snippet of HTML for debugging
     let snippet = safe_prefix(&html, 500);
     log::info!("Chapter HTML (first 500 bytes): {}", snippet);
 
@@ -317,10 +316,10 @@ pub fn resolve_internal_link(path: &Path, current_chapter_idx: usize, href: &str
     }))
 }
 
-/// Serve an image/font resource from inside the EPUB zip for the epub:// protocol.
+// Serve internal resource via epub://
 pub fn get_resource(path: &Path, resource_path: &str) -> Option<(Vec<u8>, String)> {
     let mut doc = open(path).ok()?;
-    // Normalize the resource path - remove traversal attempts and leading slashes
+    // Prevent traversal tokens.
     let clean = normalize_resource_path(resource_path);
     log::debug!("Looking up resource: {} -> {}", resource_path, clean);
     doc.get_resource_by_path(std::path::Path::new(&clean))
@@ -333,21 +332,20 @@ pub fn get_resource(path: &Path, resource_path: &str) -> Option<(Vec<u8>, String
 
 #[allow(dead_code)]
 pub fn _keep_functions_referenced() {
-    // This function is just to prevent unused function warnings
-    // The actual functions are called but compiler needs explicit reference
+    // Workaround: unused-variable warnings in test builds—these functions are called but need explicit refs
     let _ = get_resource;
     let _ = normalize_resource_path;
     let _ = detect_mime;
 }
 
-/// Safely normalize resource paths to prevent directory traversal
+// Prevent directory traverse.
 fn normalize_resource_path(path: &str) -> String {
     // Just trim and return - the path is already normalized from rewrite_src_attr
     path.trim().to_string()
 }
 
-/// Rewrite <img src="relative"> to epub://ENCODED_PATH%1FRESOURCE
-/// Uses %1F as separator (unit separator character, rarely in real paths)
+// Rewrite src via epub://
+// separator %1F prevents collision
 fn rewrite_img_srcs(html: String, chapter_path: &Path, extracted_root: &Path) -> String {
     let mut out = String::with_capacity(html.len() + 256);
     let mut rest = html.as_str();
@@ -380,7 +378,6 @@ fn rewrite_src_attr(tag: &str, chapter_path: &Path, extracted_root: &Path) -> St
             if let Some(end) = after.find(quote) {
                 let src = &after[..end];
 
-                // Skip external/embedded URLs and in-page anchors.
                 if src.starts_with("data:")
                     || src.starts_with("http:")
                     || src.starts_with("https:")
@@ -464,7 +461,7 @@ fn extract_epub(epub_path: &Path, out_dir: &Path) -> Result<()> {
 }
 
 fn resolve_resource_path(chapter_path: &Path, src: &str) -> String {
-    // Strip query/fragment; zip resource keys are plain file paths.
+    // Zip keys exclude queries.
     let src = src.split(['?', '#']).next().unwrap_or(src);
     if src.trim().is_empty() {
         return String::new();
@@ -501,7 +498,6 @@ fn detect_mime(data: &[u8]) -> &'static str {
         return "application/octet-stream";
     }
 
-    // Check magic bytes
     if data.starts_with(b"\x89PNG") {
         return "image/png";
     } else if data.starts_with(b"\xff\xd8") {
@@ -514,14 +510,13 @@ fn detect_mime(data: &[u8]) -> &'static str {
         return "image/svg+xml";
     }
 
-    // Check for SVG even if not starting with <?xml
+    // SVG may lack <?xml root.
     if let Ok(s) = std::str::from_utf8(&data[..core::cmp::min(100, data.len())]) {
         if s.contains("<svg") {
             return "image/svg+xml";
         }
     }
 
-    // Default to JPEG as fallback
     "image/jpeg"
 }
 

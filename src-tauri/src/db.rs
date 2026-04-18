@@ -7,12 +7,21 @@ use std::path::Path;
 pub type DbPool = Pool<SqliteConnectionManager>;
 
 pub fn init(app_dir: &Path) -> Result<DbPool> {
-    let manager = SqliteConnectionManager::file(app_dir.join("vivant.db"))
+    let db_path = app_dir.join("vivant.db");
+
+    {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| Error::Db(e.to_string()))?;
+        conn.execute_batch("
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous   = NORMAL;
+        ").map_err(|e| Error::Db(e.to_string()))?;
+    }
+
+    let manager = SqliteConnectionManager::file(db_path)
         .with_init(|conn| {
             conn.execute_batch("
-                PRAGMA journal_mode = WAL;
                 PRAGMA foreign_keys = ON;
-                PRAGMA synchronous   = NORMAL;
                 PRAGMA busy_timeout  = 5000;
             ")
         });

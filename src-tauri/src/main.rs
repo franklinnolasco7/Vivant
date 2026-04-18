@@ -75,8 +75,6 @@ async fn main() {
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&app_dir)?;
 
-            // Initialise pool and register as managed state —
-            // every command receives it via State<'_, DbPool>
             let pool = db::init(&app_dir).expect("failed to initialise database");
             app.manage(pool);
 

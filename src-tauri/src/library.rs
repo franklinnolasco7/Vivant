@@ -102,7 +102,7 @@ pub fn add_book(
             now
         ],
     )?;
-    // Return the actual id (may differ on conflict update)
+    // Id may differ after ON CONFLICT UPDATE
     let actual_id: String = conn.query_row(
         "SELECT id FROM books WHERE file_path = ?1",
         params![file_path],
@@ -131,6 +131,7 @@ pub fn all_books(pool: &DbPool) -> Result<Vec<Book>> {
          LEFT JOIN progress p ON p.book_id = b.id
          ORDER BY b.last_opened DESC, b.added_at DESC",
     )?;
+    // For single-chapter books, progress is scroll_pct alone; for multi-chapter, interpolate across chapters
 
     let rows = stmt.query_map([], |r| {
         let raw: Option<Vec<u8>> = r.get(10)?;
@@ -304,6 +305,7 @@ pub fn get_progress(pool: &DbPool, book_id: &str) -> Result<Option<Progress>> {
 }
 
 pub fn add_reading_time(pool: &DbPool, book_id: &str, seconds: u64) -> Result<()> {
+    // Skip no-op updates to avoid unnecessary DB round-trips
     if seconds == 0 {
         return Ok(());
     }
@@ -418,7 +420,6 @@ pub fn delete_book(pool: &DbPool, id: &str) -> Result<()> {
     if deleted == 0 {
         return Err(Error::NotFound(format!("book {id}")));
     }
-    // Also delete associated annotations and progress
     let _ = conn.execute("DELETE FROM annotations WHERE book_id = ?1", params![id]);
     let _ = conn.execute("DELETE FROM progress WHERE book_id = ?1", params![id]);
     Ok(())

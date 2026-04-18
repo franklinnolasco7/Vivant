@@ -23,9 +23,8 @@ pub fn run() {
 
             if let Some(sep_pos) = without_scheme.find(':') {
                 let encoded_book = &without_scheme[..sep_pos];
-                let resource_path_raw = &without_scheme[sep_pos + 1..]; // Skip ':'
+                let resource_path_raw = &without_scheme[sep_pos + 1..];
 
-                // Decode the book path
                 let book_path = match urlencoding::decode(encoded_book) {
                     Ok(decoded) => decoded.to_string(),
                     Err(_) => {
