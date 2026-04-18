@@ -179,7 +179,6 @@ export function render() {
 
   syncSortDropdown();
 
-  // Filter books based on search query
   const filteredBooks = filterBooks(books, searchQuery);
   applySort(filteredBooks);
 

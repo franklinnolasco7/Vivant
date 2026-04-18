@@ -11,12 +11,12 @@ export function buildResumeLocator(readingArea, chapter, scrollPct) {
   const maxScrollTop = Math.max(0, readingArea.scrollHeight - readingArea.clientHeight);
   const currentScroll = readingArea.scrollTop;
 
-  // Anchor near the top of the viewport for a stable resume target.
+  // Hit-test element near top of viewport (20% down or 16px minimum) for stable resume point
   const areaRect = readingArea.getBoundingClientRect();
   const targetY = areaRect.top + Math.max(16, areaRect.height * 0.2);
   let el = document.elementFromPoint(areaRect.left + areaRect.width / 2, targetY);
 
-  // Fallback to the first visible readable node when hit-testing fails.
+  // Fall back to first visible element when hit-testing fails or document restructures
   if (!el || !body.contains(el)) {
     const candidates = [...body.querySelectorAll("p,li,h1,h2,h3,h4,h5,h6,blockquote,div,span")];
     el = candidates.find((node) => {
@@ -106,7 +106,7 @@ export function computePixelResumeTarget(locator, maxScrollTop) {
 
   const savedScrollable = Number(locator.scrollablePx);
   if (Number.isFinite(savedScrollable) && savedScrollable > 0) {
-    // Scale absolute position to the current viewport height.
+    // Viewport height may differ: rescale saved position to current scroll range
     return clamp((rawTop / savedScrollable) * maxScrollTop, 0, maxScrollTop);
   }
 

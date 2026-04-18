@@ -98,6 +98,7 @@ function showAddNoteDialog() {
         event.preventDefault();
         close(null);
       }
+      // Cmd+Enter or Ctrl+Enter to save (common note-taking shortcut)
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         const value = String(input?.value ?? "").trim();

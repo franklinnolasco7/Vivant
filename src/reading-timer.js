@@ -1,6 +1,7 @@
 import * as api from "./api.js";
 
 const READING_TIME_TICK_MS = 15000;
+// Cap single delta to prevent burst accumulation if tab stayed hidden for hours
 const MAX_READING_TIME_STEP_SEC = 120;
 
 let _readingTimeTimer = null;
@@ -80,6 +81,7 @@ async function captureTick(force) {
   _pendingReadingSeconds += deltaSec;
   const shouldFlush = force || _pendingReadingSeconds >= 15;
   if (!shouldFlush) return;
+  // Bundle seconds and send atomically so partial reads don't get lost on retry
 
   const secondsToSave = _pendingReadingSeconds;
   _pendingReadingSeconds = 0;

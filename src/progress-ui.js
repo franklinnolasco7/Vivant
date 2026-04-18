@@ -182,6 +182,7 @@ function onProgressWheel(event) {
   _progressWheelCarry += event.deltaY * deltaScale;
 
   const stepCount = Math.trunc(_progressWheelCarry / PROGRESS_WHEEL_STEP_THRESHOLD);
+  // Require minimum threshold to prevent tiny scroll amounts from flipping chapters
   if (stepCount === 0) return;
 
   _progressWheelCarry -= stepCount * PROGRESS_WHEEL_STEP_THRESHOLD;

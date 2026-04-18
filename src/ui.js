@@ -36,7 +36,7 @@ export function toast(msg) {
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────
 
-/** Escape a string for safe insertion into innerHTML. */
+/** Prevent XSS by escaping HTML metacharacters before innerHTML. */
 export function esc(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -46,12 +46,8 @@ export function esc(s) {
 }
 
 /**
- * Build the empty-state block used across multiple panels.
- *
- * @param {string} icon  "book" — no chapters loaded; "highlighter" — no annotations yet.
- * @param {string} title  Primary heading shown to the user.
- * @param {string} sub    Secondary hint text shown below the title.
- * @returns {string} HTML string ready for innerHTML assignment.
+ * Render empty-state UI for panels ("book" or "highlighter" icon).
+ * @returns {string} HTML safe for innerHTML.
  */
 export function emptyState(icon, title, sub) {
   let iconSvg = "";

@@ -1,4 +1,3 @@
-/* ── Reader ── */
 #view-reader {
   flex: 1;
   display: flex;
@@ -179,7 +178,7 @@
   background: var(--b0);
 }
 
-/* Reading typography — Flow state */
+/* Flow state */
 .chapter-content {
   max-width: 680px;
   width: 100%;
@@ -210,7 +209,7 @@
   margin-bottom: 1.2em;
 }
 
-/* Image handling — responsive and constrained */
+/* Responsive constraints */
 .chapter-body img,
 .chapter-body figure,
 .chapter-body picture {
@@ -444,4 +443,3 @@
   mix-blend-mode: multiply;
   background: var(--b0);
 }
-

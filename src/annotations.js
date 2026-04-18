@@ -9,7 +9,7 @@ import { esc, emptyState, toast } from "./ui.js";
 /** @type {import('./api.js').Annotation[]} */
 let annotations = [];
 
-/** Callback: user clicked an annotation → jump to that chapter */
+/** onJumpToChapter callback triggered when user clicks an annotation **/
 let onJumpToChapter = (_idx) => {};
 
 let _currentBookId = null;
@@ -102,7 +102,6 @@ export function render() {
     return;
   }
 
-  // Separate highlights (no note) from notes (with note)
   const highlights = annotations.filter((a) => !a.note);
   const notes = annotations.filter((a) => a.note);
 

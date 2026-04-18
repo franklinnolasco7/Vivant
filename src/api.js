@@ -4,8 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 // --- Helpers ---
 
 /**
- * Wrap an invoke call, normalising structured Rust errors to plain strings.
- * Rust errors arrive as `{ kind: "Db" | "Epub" | …, message: "…" }`.
+ * Wrap invoke call: map structured Rust { kind, message } errors to plain strings.
+ * Simplifies error handling on frontend (don't need to check error.kind everywhere).
  */
 async function call(cmd, args = {}) {
   try {

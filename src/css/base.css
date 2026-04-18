@@ -22,7 +22,7 @@ body {
 ::selection {
   background: var(--sel);
 }
-/* ── Shell ── */
+
 #app {
   display: flex;
   flex-direction: column;
@@ -30,7 +30,7 @@ body {
   color: var(--t0);
   height: 100vh;
 }
-/* ── Content area ── */
+
 #content {
   flex: 1;
   display: flex;
@@ -38,7 +38,7 @@ body {
   overflow: hidden;
   position: relative;
 }
-/* ── Scrollbars ── */
+
 /* Keep gutter stable so text doesn't shift, while preserving thumb margins on hover. */
 .reading-area,
 .toc-items,
@@ -83,4 +83,3 @@ body {
   background: var(--t1);
   border-width: var(--scrollbar-thumb-inset-hover);
 }
-

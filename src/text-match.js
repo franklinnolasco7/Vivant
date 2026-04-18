@@ -1,5 +1,4 @@
-// Block-level tags that the browser renders with an implicit line break,
-// meaning there is no space text node between them and adjacent content.
+// Explicit browser line breaks.
 export const BLOCK_TAGS = new Set([
   "ADDRESS","ARTICLE","ASIDE","BLOCKQUOTE","DD","DETAILS","DIALOG","DIV",
   "DL","DT","FIELDSET","FIGCAPTION","FIGURE","FOOTER","FORM","H1","H2",
@@ -11,8 +10,6 @@ export function isBlockElement(node) {
   return node instanceof Element && BLOCK_TAGS.has(node.tagName);
 }
 
-// Returns true if there is at least one block-level ancestor boundary
-// between node a and node b (i.e. they live in different block boxes).
 export function crossesBlockBoundary(a, b) {
   if (!a || !b) return false;
   let cur = b.parentNode;
@@ -54,14 +51,11 @@ export function buildNormalizedTextMap(root, { stripPunct = false } = {}) {
   let prevTextNode = null;
 
   for (const textNode of textNodes) {
-    // Inject a space when crossing a block boundary so that
-    // "HeadingText" and "Paragraph text" are separated in normalizedText,
-    // matching what a real browser selection string contains.
+    // Block boundaries should create spacing in normalized text to match browser selection behavior
     if (prevTextNode && crossesBlockBoundary(prevTextNode, textNode)) {
       if (!prevSpace && normalizedText.length > 0) {
         normalizedText += " ";
-        // Use the first char of this textNode as the sentinel map entry
-        // so the space resolves to a real position in the DOM.
+        // Map synthetic space back to real DOM position via next node's first char
         map.push({ node: textNode, offset: 0, synthetic: true });
         prevSpace = true;
       }
@@ -230,8 +224,8 @@ export function flashAnnotationHit(quote) {
   if (!normalizedQuote || normalizedQuote.length < 4) return false;
   if (normalizedText.length < normalizedQuote.length) return false;
 
-  // Try full normalized quote first, then progressively shorten from end.
-  // Track exact matched length so end index uses what was found.
+  // Fuzzy match: try full quote, then progressively shorten from word boundaries
+  // Only require 50% or 20 chars minimum so partial highlights don't fail
   const MIN_SEARCH_LEN = Math.max(20, Math.floor(normalizedQuote.length * 0.5));
   let matchIdx = -1;
   let matchedLen = 0;
@@ -256,19 +250,16 @@ export function flashAnnotationHit(quote) {
   const startInfo = map[matchIdx];
   if (!startInfo) return false;
 
-  // Use matchedLen (actual hit), not normalizedQuote length, to avoid overshoot.
+  // Use actual match length to avoid selecting beyond what was found
   let endMapIdx = matchIdx + matchedLen - 1;
-
-  // Extend to include trailing chars normalization strips, if quote ends with them.
+  // Include trailing punctuation/symbols that normalization removed if they're in the original quote
   const originalEnd = q.trimEnd();
   while (endMapIdx + 1 < map.length) {
     const nextEntry = map[endMapIdx + 1];
     const nextRawChar = nextEntry.node.nodeValue?.[nextEntry.offset] ?? "";
 
-    // Stop on real word characters beyond matched range.
+    // Stop extending past word chars (prevents selecting unrelated text)
     if (/\w/.test(nextRawChar)) break;
-
-    // Only include stripped chars that are present at quote end.
     const quoteEndsWithIt = originalEnd.endsWith(
       (nextEntry.node.nodeValue || "").slice(
         nextEntry.offset,
@@ -283,7 +274,7 @@ export function flashAnnotationHit(quote) {
   const endInfo = map[Math.min(endMapIdx, map.length - 1)];
   if (!endInfo) return false;
 
-  // Validate: reconstructed text should overlap strongly with original quote
+  // Validate overlap (75%+) before highlighting to avoid false positives
   const matchedRaw = textNodes
     .slice(nodeIndex.get(startInfo.node), nodeIndex.get(endInfo.node) + 1)
     .map((n, i, arr) => {

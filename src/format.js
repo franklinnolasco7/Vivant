@@ -61,7 +61,7 @@ export function formatTimeRead(book) {
   const persistedSeconds = Number(book?.reading_seconds);
   let seconds = Number.isFinite(persistedSeconds) ? persistedSeconds : 0;
 
-  // Backward-compatible fallback for older client-side tracking data.
+  // Migration: old client-side timer key may contain data before backend tracking
   if (seconds <= 0 && book?.id) {
     const key = `book-time-${book.id}`;
     seconds = parseInt(localStorage.getItem(key) || "0", 10);
@@ -92,16 +92,17 @@ export function formatDescriptionHtml(rawDescription) {
   const doc = parser.parseFromString(raw, "text/html");
   const body = doc.body;
 
+  // Strip dangerous elements; keep semantic tags (p, strong, em, a, lists, quotes)
   body.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((el) => el.remove());
 
-  // Convert heading-like nodes to paragraphs so metadata does not create oversized text blocks.
+  // Headings become paragraphs to prevent metadata from creating oversized text blocks
   body.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
     const p = doc.createElement("p");
     p.innerHTML = el.innerHTML;
     el.replaceWith(p);
   });
 
-  // Unwrap layout wrappers that commonly appear in EPUB metadata blobs.
+  // Remove layout wrappers (commonly added by EPUB exporters for styling)
   body.querySelectorAll("div, section, article, span, font").forEach((el) => {
     el.replaceWith(...el.childNodes);
   });
@@ -115,7 +116,7 @@ export function formatDescriptionHtml(rawDescription) {
 
     const href = el.tagName === "A" ? (el.getAttribute("href") || "") : "";
 
-    // Drop presentational and unknown attributes from metadata HTML.
+    // Only keep href on links; strip all other attributes from sanitized metadata HTML
     [...el.attributes].forEach((attr) => el.removeAttribute(attr.name));
 
     if (el.tagName === "A") {

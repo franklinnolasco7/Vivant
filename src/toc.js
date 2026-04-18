@@ -122,9 +122,6 @@ function markActivePath(nodes, activePath, chapterIdx) {
 function expandToActivePath(nodes, activePath) {
   for (const node of nodes) {
     if (node.children.length > 0) {
-      const hasActive = markActivePath([node], new Set(), -1); // Just to check subtree conceptually? MarkActivePath requires chapterIdx.
-      // Wait, original reader.js used markActivePath([node], new Set()) which relied on global chapterIdx.
-      // We will fix that.
       const hasActiveLocal = markActivePath([node], new Set(), currentChapterIdx);
       if (hasActiveLocal && activePath.has(node.groupId)) {
         tocCollapsedGroups.delete(node.groupId);

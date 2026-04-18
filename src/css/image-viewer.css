@@ -1,4 +1,3 @@
-/* ── Image viewer ── */
 .image-viewer-backdrop {
   position: fixed;
   inset: 0;
@@ -132,4 +131,3 @@
 .image-viewer-menu-item:hover {
   background: var(--b2);
 }
-
