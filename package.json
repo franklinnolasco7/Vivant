@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "vite": "^5",
-    "vitest": "^1"
+    "vite": "^8",
+    "vitest": "^4"
   }
 }
