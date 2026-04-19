@@ -311,6 +311,10 @@ function switchView(view) {
   const wasReader = currentView === "reader";
   currentView = view;
 
+  if (view === "library" && search.isOpen()) {
+    search.close();
+  }
+
   const applyViewState = () => {
     document.getElementById("view-library").style.display = view === "library" ? "block" : "none";
     document.getElementById("view-reader").style.display  = view === "reader"  ? "flex"  : "none";
@@ -322,10 +326,10 @@ function switchView(view) {
   };
 
   if (wasReader && view !== "reader") {
+    applyViewState();
     pendingReaderFlush = Promise.resolve(reader.flushProgress?.()).catch(() => {});
     pendingReaderFlush.finally(() => {
       if (view === "library") lib.load();
-      applyViewState();
     });
     return;
   } else if (view === "library") {
