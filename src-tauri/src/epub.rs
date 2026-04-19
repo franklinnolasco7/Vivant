@@ -423,23 +423,28 @@ fn normalize_resource_path(path: &str) -> String {
 // Rewrite src via epub://
 // separator %1F prevents collision
 fn rewrite_img_srcs(html: String, chapter_path: &Path, extracted_root: &Path) -> String {
-    let mut out = String::with_capacity(html.len() + 256);
-    let mut rest = html.as_str();
-    let mut count = 0;
+    let mut out = html;
+    let mut total_count = 0;
 
-    while let Some(img_start) = rest.find("<img") {
-        out.push_str(&rest[..img_start]);
-        let from_img = &rest[img_start..];
-        let tag_len = from_img.find('>').map(|i| i + 1).unwrap_or(from_img.len());
-        let tag = &from_img[..tag_len];
-        out.push_str(&rewrite_src_attr(tag, chapter_path, extracted_root));
-        rest = &from_img[tag_len..];
-        count += 1;
+    for tag_name in ["<img", "<image"] {
+        let mut temp_out = String::with_capacity(out.len() + 256);
+        let mut rest = out.as_str();
+
+        while let Some(start) = rest.find(tag_name) {
+            temp_out.push_str(&rest[..start]);
+            let from_tag = &rest[start..];
+            let tag_len = from_tag.find('>').map(|i| i + 1).unwrap_or(from_tag.len());
+            let tag = &from_tag[..tag_len];
+            temp_out.push_str(&rewrite_src_attr(tag, chapter_path, extracted_root));
+            rest = &from_tag[tag_len..];
+            total_count += 1;
+        }
+        temp_out.push_str(rest);
+        out = temp_out;
     }
-    out.push_str(rest);
 
-    if count > 0 {
-        log::info!("Rewrote {} image tags in chapter", count);
+    if total_count > 0 {
+        log::info!("Rewrote {} image tags in chapter", total_count);
     } else {
         log::warn!("No image tags found in chapter HTML");
     }
@@ -447,38 +452,42 @@ fn rewrite_img_srcs(html: String, chapter_path: &Path, extracted_root: &Path) ->
 }
 
 fn rewrite_src_attr(tag: &str, chapter_path: &Path, extracted_root: &Path) -> String {
-    for quote in ['"', '\''] {
-        let marker = format!("src={}", quote);
-        if let Some(pos) = tag.find(&marker) {
-            let after = &tag[pos + marker.len()..];
-            if let Some(end) = after.find(quote) {
-                let src = &after[..end];
+    let mut modified_tag = tag.to_string();
+    for attr in ["src=", "href=", "xlink:href="] {
+        for quote in ['"', '\''] {
+            let marker = format!("{}{}", attr, quote);
+            if let Some(pos) = modified_tag.find(&marker) {
+                let after = &modified_tag[pos + marker.len()..];
+                if let Some(end) = after.find(quote) {
+                    let src = &after[..end];
 
-                if src.starts_with("data:")
-                    || src.starts_with("http:")
-                    || src.starts_with("https:")
-                    || src.starts_with("#")
-                {
-                    return tag.to_string();
+                    if src.starts_with("data:")
+                        || src.starts_with("http:")
+                        || src.starts_with("https:")
+                        || src.starts_with("#")
+                    {
+                        continue;
+                    }
+
+                    let clean = resolve_resource_path(chapter_path, src);
+                    if clean.is_empty() {
+                        continue;
+                    }
+
+                    let absolute = extracted_root.join(Path::new(&clean));
+                    let new_src = file_url(&absolute);
+
+                    if let Some(new_src) = new_src {
+                        let to_replace = format!("{}{}{}", marker, src, quote);
+                        let replacement = format!("{}{}{}", marker, new_src, quote);
+                        modified_tag = modified_tag.replacen(&to_replace, &replacement, 1);
+                        return modified_tag;
+                    }
                 }
-
-                let clean = resolve_resource_path(chapter_path, src);
-                if clean.is_empty() {
-                    return tag.to_string();
-                }
-
-                let absolute = extracted_root.join(Path::new(&clean));
-                let new_src = file_url(&absolute);
-
-                if let Some(new_src) = new_src {
-                    return tag.replacen(src, &new_src, 1);
-                }
-
-                return tag.to_string();
             }
         }
     }
-    tag.to_string()
+    modified_tag
 }
 
 fn file_url(path: &Path) -> Option<String> {

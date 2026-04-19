@@ -417,22 +417,35 @@ function scheduleProgressSave() {
 
 
 async function convertLocalImageUrls() {
-  const images = [...document.querySelectorAll(".chapter-body img")];
-  if (!images.length) return;
+  const elements = [...document.querySelectorAll(".chapter-body img, .chapter-body image")];
+  if (!elements.length) return;
 
   try {
     const { convertFileSrc } = await import("@tauri-apps/api/core");
 
-    images.forEach((img) => {
-      const raw = img.getAttribute("src") || "";
-      if (!raw.startsWith("file://")) return;
+    elements.forEach((el) => {
+      const attrs = ["src", "href", "xlink:href"];
+      let raw = "";
+      let usedAttr = "";
+      for (const attr of attrs) {
+        if (el.hasAttribute(attr)) {
+          const val = el.getAttribute(attr);
+          if (val && val.startsWith("file://")) {
+            raw = val;
+            usedAttr = attr;
+            break;
+          }
+        }
+      }
+
+      if (!raw) return;
 
       try {
         const parsed = new URL(raw);
         let filePath = decodeURIComponent(parsed.pathname);
         // Normalize Windows paths so convertFileSrc receives a valid local path.
         if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
-        img.setAttribute("src", convertFileSrc(filePath));
+        el.setAttribute(usedAttr, convertFileSrc(filePath));
       } catch {
         // Leave original src to avoid hiding images when conversion fails.
       }
