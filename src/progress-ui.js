@@ -268,7 +268,7 @@ function showTooltip(clientX) {
   if (targetChapter !== _progressTooltipLastChapter) {
     const chapterPct = ctx.chapterProgressPct(targetChapter);
     _progressTooltipTitleEl.textContent = chapterTooltipTitle(targetChapter);
-    _progressTooltipMetaEl.textContent = `Chapter ${targetChapter + 1} of ${chapterTotal} · ${chapterPct}%`;
+    _progressTooltipMetaEl.textContent = `${targetChapter + 1} of ${chapterTotal} · ${chapterPct}%`;
     _progressTooltipLastChapter = targetChapter;
     _progressTooltipWidth = 0;
     _progressTooltipHeight = 0;

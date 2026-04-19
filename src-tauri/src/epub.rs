@@ -148,27 +148,100 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
     }
 
     for i in 0..total {
-        merged.entry(i).or_insert(TocEntry {
-            label: fallback_chapter_label(i, &spine_ids),
-            chapter_idx: i,
-            depth: 0,
+        merged.entry(i).or_insert_with(|| {
+            let label = fallback_chapter_label(i, &spine_ids, path);
+            TocEntry { label, chapter_idx: i, depth: 0 }
         });
     }
 
     Ok(merged.into_values().collect())
 }
 
-fn fallback_chapter_label(idx: usize, spine_ids: &[String]) -> String {
+fn fallback_chapter_label(
+    idx: usize,
+    spine_ids: &[String],
+    epub_path: &Path,
+) -> String {
+    // Try matching well-known spine ID patterns first.
     if let Some(id) = spine_ids.get(idx) {
         let id_l = id.to_lowercase();
-        if id_l.contains("cover") {
-            return "Cover".to_string();
-        }
-        if id_l.contains("title") || id_l.contains("titlepage") {
-            return "Title Page".to_string();
+        let known: &[(&str, &str)] = &[
+            ("cover", "Cover"),
+            ("titlepage", "Title Page"),
+            ("title", "Title Page"),
+            ("preface", "Preface"),
+            ("foreword", "Foreword"),
+            ("introduction", "Introduction"),
+            ("prologue", "Prologue"),
+            ("dedication", "Dedication"),
+            ("epigraph", "Epigraph"),
+            ("contents", "Contents"),
+            ("toc", "Table of Contents"),
+            ("epilogue", "Epilogue"),
+            ("afterword", "Afterword"),
+            ("acknowledgment", "Acknowledgments"),
+            ("acknowledgement", "Acknowledgments"),
+            ("appendix", "Appendix"),
+            ("glossary", "Glossary"),
+            ("bibliography", "Bibliography"),
+            ("index", "Index"),
+            ("copyright", "Copyright"),
+            ("about", "About the Author"),
+            ("notes", "Notes"),
+            ("endnotes", "Endnotes"),
+            ("footnotes", "Footnotes"),
+        ];
+        for (pat, label) in known {
+            if id_l.contains(pat) {
+                return label.to_string();
+            }
         }
     }
+
+    // Try extracting a title from the chapter HTML.
+    if let Some(label) = extract_chapter_title_from_html(idx, epub_path) {
+        return label;
+    }
+
     format!("Chapter {}", idx + 1)
+}
+
+/// Pull a usable label from the chapter's `<title>` or first heading element.
+fn extract_chapter_title_from_html(idx: usize, epub_path: &Path) -> Option<String> {
+    let mut doc = EpubDoc::new(epub_path).ok()?;
+    doc.set_current_chapter(idx);
+    let (raw, _) = doc.get_current_str()?;
+
+    // Try <title>…</title> first.
+    if let Some(t) = extract_tag_text(&raw, "title") {
+        if !t.is_empty() {
+            return Some(t);
+        }
+    }
+
+    // Fall back to first heading (h1 → h4).
+    for tag in &["h1", "h2", "h3", "h4"] {
+        if let Some(t) = extract_tag_text(&raw, tag) {
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+
+    None
+}
+
+/// Naïve tag-text extractor: returns inner text of first `<tag …>…</tag>`.
+fn extract_tag_text(html: &str, tag: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let open = format!("<{}", tag);
+    let close = format!("</{}>", tag);
+    let start = lower.find(&open)?;
+    let after_open = html[start..].find('>')? + start + 1;
+    let end = lower[after_open..].find(&close)? + after_open;
+    let inner = to_plain(&html[after_open..end]);
+    let trimmed = inner.trim().to_string();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
 }
 
 pub fn get_chapter_html_with_cache(

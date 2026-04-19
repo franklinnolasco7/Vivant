@@ -245,8 +245,7 @@ function renderChapter(
   progressUI.clearWheelTarget();
 
   document.getElementById("chapter-content").innerHTML = `
-    <div class="chapter-num">Chapter ${ch.index + 1} of ${chapterTotal}</div>
-    <div class="chapter-title">${esc(ch.title)}</div>
+    <div class="chapter-num">${esc(ch.title)} · ${ch.index + 1} of ${chapterTotal}</div>
     <div class="chapter-body">${ch.html}</div>`;
 
   links.attach(document.querySelector(".chapter-body"));
