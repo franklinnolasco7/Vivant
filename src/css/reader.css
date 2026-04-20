@@ -204,6 +204,8 @@
   font-size: 18px;
   line-height: 1.85;
   color: var(--t0);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 .chapter-body p {
   margin-bottom: 1.2em;
