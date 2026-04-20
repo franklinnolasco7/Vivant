@@ -210,8 +210,8 @@ export function render() {
           </button>
         </div>
       </div>
-      <div class="book-title">${esc(b.title)}</div>
-      <div class="book-author">${esc(b.author)}</div>
+      <div class="book-title" title="${esc(b.title)}">${esc(b.title)}</div>
+      <div class="book-author" title="${esc(b.author)}">${esc(b.author)}</div>
       <div class="progress-bar">
         <div class="progress-fill" style="width:${b.progress_pct}%"></div>
       </div>
