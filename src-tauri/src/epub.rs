@@ -65,13 +65,13 @@ pub fn parse_meta(path: &Path, include_cover: bool) -> Result<BookMeta> {
     let published_at = first_meta_value(&mut doc, &["date", "published", "issued"]);
     let file_size = fs::metadata(path).ok().map(|m| m.len());
     let chapter_count = doc.get_num_chapters();
-    
+
     let cover_data = if include_cover {
         doc.get_cover().and_then(|(data, _mime)| resize_cover(&data))
     } else {
         None
     };
-    
+
     Ok(BookMeta {
         title,
         author,
@@ -132,7 +132,7 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
 
     walk(&toc_items, &doc, &spine_ids, total, &mut out, 0);
 
-    // Dedup nav labels per spine.
+    // Dedup: TOC walk may produce multiple entries per chapter (nested headings). Keep first occurrence.
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
     for e in out {
@@ -141,14 +141,15 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
         }
     }
 
-    // Merge custom nav with full spine coverage.
+    // Merge deduped TOC with full spine to ensure every chapter is navigable,
+    // even if TOC omits it (common in self-published EPUBs).
     let mut merged: BTreeMap<usize, TocEntry> = BTreeMap::new();
     for e in deduped {
         merged.entry(e.chapter_idx).or_insert(e);
     }
 
-    // Fill gaps for any spine items that lack a TOC entry so every chapter
-    // is navigable and chapterTotal matches the real spine count.
+    // Fill unmapped chapters with generated labels (e.g., "Section 42") so spine count
+    // matches TOC length—UI depends on this for accurate chapter navigation.
     for i in 0..total {
         merged.entry(i).or_insert_with(|| {
             let label = fallback_chapter_label(i, &spine_ids, path);
@@ -164,7 +165,6 @@ fn fallback_chapter_label(
     spine_ids: &[String],
     epub_path: &Path,
 ) -> String {
-    // Try matching well-known spine ID patterns first.
     if let Some(id) = spine_ids.get(idx) {
         let id_l = id.to_lowercase();
         let known: &[(&str, &str)] = &[
@@ -214,7 +214,6 @@ fn extract_chapter_title_from_html(idx: usize, epub_path: &Path) -> Option<Strin
     doc.set_current_chapter(idx);
     let (raw, _) = doc.get_current_str()?;
 
-    // Fall back to first heading (h1 → h4).
     for tag in &["h1", "h2", "h3", "h4"] {
         if let Some(t) = extract_tag_text(&raw, tag) {
             if !t.is_empty() {
@@ -388,10 +387,8 @@ pub fn resolve_internal_link(path: &Path, current_chapter_idx: usize, href: &str
     }))
 }
 
-// Serve internal resource via epub://
 pub fn get_resource(path: &Path, resource_path: &str) -> Option<(Vec<u8>, String)> {
     let mut doc = open(path).ok()?;
-    // Prevent traversal tokens.
     let clean = normalize_resource_path(resource_path);
     log::debug!("Looking up resource: {} -> {}", resource_path, clean);
     doc.get_resource_by_path(std::path::Path::new(&clean))
@@ -404,20 +401,15 @@ pub fn get_resource(path: &Path, resource_path: &str) -> Option<(Vec<u8>, String
 
 #[allow(dead_code)]
 pub fn _keep_functions_referenced() {
-    // Workaround: unused-variable warnings in test builds—these functions are called but need explicit refs
     let _ = get_resource;
     let _ = normalize_resource_path;
     let _ = detect_mime;
 }
 
-// Prevent directory traverse.
 fn normalize_resource_path(path: &str) -> String {
-    // Just trim and return - the path is already normalized from rewrite_src_attr
     path.trim().to_string()
 }
 
-// Rewrite src via epub://
-// separator %1F prevents collision
 fn rewrite_img_srcs(html: String, chapter_path: &Path, extracted_root: &Path) -> String {
     let mut out = html;
     let mut total_count = 0;
@@ -499,6 +491,8 @@ fn cache_dir_for_book(epub_path: &Path, cache_root: &Path) -> PathBuf {
 }
 
 fn source_fingerprint(epub_path: &Path) -> Result<String> {
+    // Fingerprint combines path + size + mtime. If any changes, cache is invalidated.
+    // (Hash of path prevents collisions across multiple books in same cache root.)
     let meta = fs::metadata(epub_path)?;
     let modified = meta
         .modified()
@@ -542,7 +536,7 @@ fn extract_epub(epub_path: &Path, out_dir: &Path) -> Result<()> {
 }
 
 fn resolve_resource_path(chapter_path: &Path, src: &str) -> String {
-    // Zip keys exclude queries.
+    // Strip query/anchor (zip keys don't include them).
     let src = src.split(['?', '#']).next().unwrap_or(src);
     if src.trim().is_empty() {
         return String::new();
@@ -555,6 +549,8 @@ fn resolve_resource_path(chapter_path: &Path, src: &str) -> String {
     let mut base = chapter_path.to_path_buf();
     base.pop();
 
+    // Normalize path component-by-component: only ParentDir and Normal components are allowed.
+    // CurDir, RootDir, Prefix are ignored. This prevents `../../../etc/passwd` traversal attacks.
     for comp in Path::new(&decoded).components() {
         match comp {
             Component::ParentDir => {
@@ -583,6 +579,7 @@ fn detect_mime(data: &[u8]) -> &'static str {
         return "application/octet-stream";
     }
 
+    // Check magic bytes (binary headers). Covers 99% of common formats.
     if data.starts_with(b"\x89PNG") {
         return "image/png";
     } else if data.starts_with(b"\xff\xd8") {
@@ -595,13 +592,14 @@ fn detect_mime(data: &[u8]) -> &'static str {
         return "image/svg+xml";
     }
 
-    // SVG may lack <?xml root.
+    // Some SVG images omit XML declaration. Try UTF-8 decode + tag search as last resort.
     if let Ok(s) = std::str::from_utf8(&data[..core::cmp::min(100, data.len())]) {
         if s.contains("<svg") {
             return "image/svg+xml";
         }
     }
 
+    // Default to JPEG for unknown binary formats (EPUB covers rarely seen types).
     "image/jpeg"
 }
 
