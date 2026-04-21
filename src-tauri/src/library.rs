@@ -85,7 +85,7 @@ pub fn add_book(
            published_at=excluded.published_at,
            file_size=excluded.file_size,
            chapter_count=excluded.chapter_count,
-           cover_data=excluded.cover_data",
+           cover_data=COALESCE(excluded.cover_data, books.cover_data)",
         params![
             id,
             title,
@@ -253,6 +253,48 @@ pub fn backfill_book_metadata(pool: &DbPool) -> Result<()> {
                 meta.file_size.map(|v| v as i64),
                 id,
             ],
+        );
+    }
+
+    Ok(())
+}
+
+pub fn backfill_book_covers(pool: &DbPool) -> Result<()> {
+    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, file_path
+         FROM books
+         WHERE cover_data IS NULL",
+    )?;
+
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+        ))
+    })?;
+
+    let items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+
+    for (id, file_path) in items {
+        let path = std::path::Path::new(&file_path);
+        if !path.exists() {
+            continue;
+        }
+
+        let Ok(meta) = epub::parse_meta(path, true) else {
+            continue;
+        };
+
+        let Some(cover_data) = meta.cover_data else {
+            continue;
+        };
+
+        let _ = conn.execute(
+            "UPDATE books SET cover_data = ?1 WHERE id = ?2",
+            params![cover_data, id],
         );
     }
 
@@ -452,11 +494,31 @@ fn b64_push(data: &[u8], out: &mut String) {
 }
 
 fn detect_mime(data: &[u8]) -> &'static str {
-    if data.starts_with(b"\x89PNG") { "image/png" }
-    else if data.starts_with(b"\xff\xd8") { "image/jpeg" }
-    else if data.starts_with(b"GIF") { "image/gif" }
-    else if data.starts_with(b"RIFF") { "image/webp" }
-    else { "image/jpeg" }
+    if data.is_empty() {
+        return "application/octet-stream";
+    }
+
+    if data.starts_with(b"\x89PNG") {
+        return "image/png";
+    } else if data.starts_with(b"\xff\xd8") {
+        return "image/jpeg";
+    } else if data.starts_with(b"GIF8") {
+        return "image/gif";
+    } else if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
+        return "image/webp";
+    } else if data.starts_with(b"BM") {
+        return "image/bmp";
+    } else if data.starts_with(b"<?xml") || data.starts_with(b"<svg") {
+        return "image/svg+xml";
+    }
+
+    if let Ok(s) = std::str::from_utf8(&data[..core::cmp::min(100, data.len())]) {
+        if s.contains("<svg") {
+            return "image/svg+xml";
+        }
+    }
+
+    "image/jpeg"
 }
 
 #[cfg(test)]

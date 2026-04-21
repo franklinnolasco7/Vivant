@@ -56,7 +56,7 @@ pub async fn import_epub(
         meta.cover_data,
     )
     .map_err(|e| e.to_string())?;
-    
+
     library::all_books(&pool)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -70,6 +70,7 @@ pub async fn import_epub(
 pub async fn get_library(pool: State<'_, DbPool>) -> CommandResult<Vec<library::Book>> {
     library::backfill_chapter_counts(&pool).ok();
     library::backfill_book_metadata(&pool).ok();
+    library::backfill_book_covers(&pool).ok();
     into_command_result(library::all_books(&pool))
 }
 

@@ -67,7 +67,9 @@ pub fn parse_meta(path: &Path, include_cover: bool) -> Result<BookMeta> {
     let chapter_count = doc.get_num_chapters();
 
     let cover_data = if include_cover {
-        doc.get_cover().and_then(|(data, _mime)| resize_cover(&data))
+        doc.get_cover()
+            .or_else(|| get_fallback_cover(&mut doc))
+            .map(|(data, _mime)| resize_cover(&data).unwrap_or(data))
     } else {
         None
     };
@@ -696,4 +698,55 @@ fn resize_cover(data: &[u8]) -> Option<Vec<u8>> {
     let mut out = std::io::Cursor::new(Vec::new());
     resized.write_to(&mut out, image::ImageFormat::Jpeg).ok()?;
     Some(out.into_inner())
+}
+
+fn get_fallback_cover(doc: &mut epub::doc::EpubDoc<std::io::BufReader<std::fs::File>>) -> Option<(Vec<u8>, String)> {
+    let mut target_id = None;
+
+    // 1. "cover-image" property
+    if target_id.is_none() {
+        if let Some((id, _)) = doc.resources.iter().find(|(_, res)| {
+            res.properties.as_ref().map_or(false, |p| p.split_ascii_whitespace().any(|s| s == "cover-image"))
+        }) {
+            target_id = Some(id.clone());
+        }
+    }
+
+    // 2. Try mdata("cover") for EPUB3 files where get_cover might not look for it but mdata has it
+    if target_id.is_none() {
+        if let Some(item) = doc.mdata("cover") {
+            if doc.resources.contains_key(&item.value) {
+                target_id = Some(item.value.clone());
+            }
+        }
+    }
+
+    // 3. ID or path containing "cover"
+    if target_id.is_none() {
+        if let Some((id, _)) = doc.resources.iter().find(|(id, res)| {
+            if !res.mime.starts_with("image/") { return false; }
+            let p = res.path.to_string_lossy().to_lowercase();
+            let i = id.to_lowercase();
+            p.contains("cover") || i.contains("cover")
+        }) {
+            target_id = Some(id.clone());
+        }
+    }
+
+    // 4. First image in manifest
+    if target_id.is_none() {
+        let mut images: Vec<_> = doc.resources.iter()
+            .filter(|(_, res)| res.mime.starts_with("image/"))
+            .collect();
+        images.sort_by_key(|(_, res)| res.path.to_string_lossy().into_owned());
+        if let Some((id, _)) = images.first() {
+            target_id = Some((*id).clone());
+        }
+    }
+
+    if let Some(id) = target_id {
+        return doc.get_resource(&id);
+    }
+
+    None
 }

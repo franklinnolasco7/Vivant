@@ -102,7 +102,7 @@ export function formatDescriptionHtml(rawDescription) {
     el.replaceWith(p);
   });
 
-  // Remove layout wrappers (commonly added by EPUB exporters for styling)
+  // To Remove layout wrappers
   body.querySelectorAll("div, section, article, span, font").forEach((el) => {
     el.replaceWith(...el.childNodes);
   });

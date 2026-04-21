@@ -19,7 +19,6 @@ export function setToc(toc) {
   _toc = Array.isArray(toc) ? toc : [];
 }
 
-// Detail panel state
 let _detailBackdrop = null;
 let _detailPanel = null;
 let _currentDetailAnnotation = null;
@@ -308,7 +307,6 @@ export function open() {
 
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
-/** Initialize the annotation detail panel (create DOM elements). */
 function initDetailPanel() {
   const content = document.getElementById("content");
   if (!content) return;
@@ -346,7 +344,6 @@ function initDetailPanel() {
   content.appendChild(_detailBackdrop);
   content.appendChild(_detailPanel);
 
-  // Event listeners
   _detailBackdrop.addEventListener("click", () => closeDetailPanel());
   document.getElementById("ann-detail-close").addEventListener("click", (e) => {
     e.preventDefault();
@@ -365,14 +362,12 @@ function initDetailPanel() {
   });
 }
 
-/** Open the detail panel with the given annotation ID. */
 function openDetailPanel(annId) {
   const ann = annotations.find((a) => a.id === annId);
   if (!ann) return;
 
   _currentDetailAnnotation = ann;
 
-  // Populate content
   const quoteEl = document.getElementById("ann-detail-quote");
   const noteEl = document.getElementById("ann-detail-note");
   const metaEl = document.getElementById("ann-detail-meta");
@@ -392,7 +387,6 @@ function openDetailPanel(annId) {
     : `Section ${ann.chapter_idx + 1}`;
   metaEl.innerHTML = `<span>${esc(metaLabel)}</span>`;
 
-  // Show panel
   _detailBackdrop.classList.add("open");
   _detailPanel.classList.add("open");
   _detailPanel.setAttribute("aria-hidden", "false");
@@ -401,7 +395,6 @@ function openDetailPanel(annId) {
   document.body.style.overflow = "hidden";
 }
 
-/** Close the detail panel. */
 function closeDetailPanel() {
   if (!_detailPanel) return;
 
@@ -410,11 +403,9 @@ function closeDetailPanel() {
   _detailPanel.setAttribute("aria-hidden", "true");
   _currentDetailAnnotation = null;
 
-  // Restore body scroll
   document.body.style.overflow = "";
 }
 
-/** Jump to the location of the current detail annotation. */
 function jumpToDetailAnnotation() {
   if (!_currentDetailAnnotation) return;
   const chapterIdx = _currentDetailAnnotation.chapter_idx;
