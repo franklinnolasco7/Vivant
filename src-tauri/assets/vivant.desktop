@@ -1,10 +1,11 @@
 [Desktop Entry]
 Name=Vivant
+GenericName=E-Book Reader
 Comment=Fast, native EPUB reader for Linux
 Exec=Vivant %f
-Icon=vivant
+Icon=Vivant
 Type=Application
 Categories=Office;Viewer;
 MimeType=application/epub+zip;
-StartupWMClass=vivant
+StartupWMClass=Vivant
 Keywords=epub;ebook;reader;book;

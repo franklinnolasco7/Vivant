@@ -119,6 +119,9 @@
   cursor: pointer;
   transition: transform 0.2s;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 250px;
+  contain: content;
 }
 .book-card:hover {
   transform: translateY(-3px);

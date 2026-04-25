@@ -301,6 +301,70 @@ pub fn backfill_book_covers(pool: &DbPool) -> Result<()> {
     Ok(())
 }
 
+// ── TOC persistence ───────────────────────────────────────────────────────────
+
+/// Store parsed TOC as JSON so subsequent opens skip EPUB parsing entirely.
+pub fn save_book_toc(pool: &DbPool, book_id: &str, toc: &[epub::TocEntry]) -> Result<()> {
+    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+    let json = serde_json::to_string(toc).map_err(|e| Error::Db(e.to_string()))?;
+    conn.execute(
+        "UPDATE books SET toc_json = ?1 WHERE id = ?2",
+        params![json, book_id],
+    )?;
+    Ok(())
+}
+
+/// Load cached TOC from DB. Returns None if not yet cached.
+pub fn get_book_toc(pool: &DbPool, file_path: &str) -> Result<Option<Vec<epub::TocEntry>>> {
+    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+    let mut stmt = conn.prepare(
+        "SELECT toc_json FROM books WHERE file_path = ?1 AND toc_json IS NOT NULL",
+    )?;
+    let mut rows = stmt.query(params![file_path])?;
+    match rows.next()? {
+        Some(row) => {
+            let json: String = row.get(0)?;
+            let entries: Vec<epub::TocEntry> =
+                serde_json::from_str(&json).map_err(|e| Error::Db(e.to_string()))?;
+            Ok(Some(entries))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Backfill TOC JSON for books that were imported before this feature existed.
+pub fn backfill_book_toc(pool: &DbPool) -> Result<()> {
+    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+    let mut stmt = conn.prepare(
+        "SELECT id, file_path FROM books WHERE toc_json IS NULL",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    })?;
+    let items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+
+    for (id, file_path) in items {
+        let path = std::path::Path::new(&file_path);
+        if !path.exists() {
+            continue;
+        }
+        let Ok(toc) = epub::parse_toc(path) else {
+            continue;
+        };
+        let json = match serde_json::to_string(&toc) {
+            Ok(j) => j,
+            Err(_) => continue,
+        };
+        let _ = conn.execute(
+            "UPDATE books SET toc_json = ?1 WHERE id = ?2",
+            params![json, id],
+        );
+    }
+
+    Ok(())
+}
+
 pub fn touch_book(pool: &DbPool, id: &str) -> Result<()> {
     let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
     let now = Utc::now().to_rfc3339();

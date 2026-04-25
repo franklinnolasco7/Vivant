@@ -6,6 +6,8 @@
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 const THEMES = ["dark", "sepia", "light", "bw"];
+export const TOAST_DURATION_MS = 2600;
+export const LIBRARY_SEARCH_DEBOUNCE_MS = 150;
 
 export function applyTheme(theme) {
   if (!THEMES.includes(theme)) theme = "dark";
@@ -31,7 +33,7 @@ export function toast(msg) {
   el.textContent = msg;
   el.classList.add("show");
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  _toastTimer = setTimeout(() => el.classList.remove("show"), TOAST_DURATION_MS);
 }
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────
@@ -69,6 +71,12 @@ export function emptyState(icon, title, sub) {
     <div class="empty-state-title">${esc(title)}</div>
     <div class="empty-state-sub">${esc(sub)}</div>
   </div>`;
+}
+
+// ── Math helpers ────────────────────────────────────────────────────────────────
+
+export function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
 }
 
 // ── Cover colour palette ──────────────────────────────────────────────────────

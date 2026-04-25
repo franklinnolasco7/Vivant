@@ -307,18 +307,8 @@ export function open() {
 
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
-function initDetailPanel() {
-  const content = document.getElementById("content");
-  if (!content) return;
-
-  _detailBackdrop = document.createElement("div");
-  _detailBackdrop.className = "ann-detail-backdrop";
-  _detailBackdrop.setAttribute("aria-hidden", "true");
-
-  _detailPanel = document.createElement("aside");
-  _detailPanel.className = "ann-detail-panel";
-  _detailPanel.setAttribute("aria-hidden", "true");
-  _detailPanel.innerHTML = `
+function buildDetailPanelHTML() {
+  return `
     <div class="ann-detail-header">
       <button class="ann-detail-close" id="ann-detail-close" title="Close" aria-label="Close">
         <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -338,8 +328,21 @@ function initDetailPanel() {
       <div class="ann-detail-quote" id="ann-detail-quote"></div>
       <div class="ann-detail-note" id="ann-detail-note"></div>
       <div class="ann-detail-meta" id="ann-detail-meta"></div>
-    </div>
-  `;
+    </div>`;
+}
+
+function initDetailPanel() {
+  const content = document.getElementById("content");
+  if (!content) return;
+
+  _detailBackdrop = document.createElement("div");
+  _detailBackdrop.className = "ann-detail-backdrop";
+  _detailBackdrop.setAttribute("aria-hidden", "true");
+
+  _detailPanel = document.createElement("aside");
+  _detailPanel.className = "ann-detail-panel";
+  _detailPanel.setAttribute("aria-hidden", "true");
+  _detailPanel.innerHTML = buildDetailPanelHTML();
 
   content.appendChild(_detailBackdrop);
   content.appendChild(_detailPanel);

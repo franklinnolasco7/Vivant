@@ -11,7 +11,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build:linux": "tauri build --bundles deb,rpm",
     "build:release": "npm run build && cargo build --release --manifest-path src-tauri/Cargo.toml",
-    "run:release": "./src-tauri/target/release/vivant",
+    "run:release": "./src-tauri/target/release/Vivant",
     "start:arch": "npm run build:release && npm run run:release",
     "test": "vitest run"
   },
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "esbuild": "^0.28.0",
+    "terser": "^5.46.1",
     "vite": "^8",
     "vitest": "^4"
   }

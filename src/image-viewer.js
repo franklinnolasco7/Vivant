@@ -1,5 +1,7 @@
 import { toast } from "./ui.js";
 
+const IMAGE_VIEWER_CLOSE_DELAY_MS = 140;
+
 let _imageViewerBackdrop = null;
 let _imageViewerPanel = null;
 let _imageViewerImg = null;
@@ -288,7 +290,7 @@ export function closeImageViewer() {
       _imageViewerCaption.setAttribute("aria-hidden", "true");
     }
     document.body.style.overflow = "";
-  }, 140);
+  }, IMAGE_VIEWER_CLOSE_DELAY_MS);
 }
 
 export function isImageViewerOpen() {

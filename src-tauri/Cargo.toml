@@ -29,7 +29,7 @@ zip                 = "2"
 rusqlite            = { version = "0.31", features = ["bundled"] }
 r2d2                = "0.8"
 r2d2_sqlite         = "0.24"
-tokio               = { version = "1", features = ["full"] }
+tokio               = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 dirs                = "5"
 uuid                = { version = "1", features = ["v4"] }
 chrono              = { version = "0.4", features = ["serde"] }
@@ -48,5 +48,5 @@ tempfile = "3"
 panic         = "abort"
 codegen-units = 1
 lto           = true
-opt-level     = "s"
+opt-level     = "z"
 strip         = true

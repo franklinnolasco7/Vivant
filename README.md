@@ -1,33 +1,22 @@
-<div align="center">
+<p align="center">
+  <img src="src-tauri/icons/vivant.svg" width="120px" alt="Vivant logo" />
+</p>
 
-<img width="120" height="120" alt="vivant logo" src="src-tauri/icons/vivant.svg" />
+<h3 align="center">Read More. Live More. Vivant.</h3>
+<p align="center">A native Tauri e-reader for Linux.</p>
 
-# Vivant
+<p align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL%20v3-teal.svg?style=flat-square" alt="License" />
+  </a>
+  <a href="https://www.linux.org/pages/download/">
+    <img src="https://img.shields.io/badge/Platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Platform" />
+  </a>
+  <a href="https://github.com/franklinnolasco7/Vivant/releases">
+    <img src="https://img.shields.io/badge/Status-Unreleased-lightgrey?style=flat-square" alt="Status" />
+  </a>
 
-_Built for readers who care._
-
-A native Tauri e-reader for Linux.
-
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL%20v3-teal.svg?style=flat-square)](LICENSE)
-[![Tauri](https://img.shields.io/badge/Built%20with-Tauri-24C8D8?style=flat-square&logo=tauri)](https://tauri.app)
-[![Rust](https://img.shields.io/badge/Rust-stable-CE412B?style=flat-square&logo=rust)](https://www.rust-lang.org)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js)](https://nodejs.org)
-
----
-
-<img src="https://github.com/user-attachments/assets/e642b466-7cfd-4d8a-977c-59ebca0d05ad" alt="Vivant Screenshot — Library View" width="90%" />
-
-<br/>
-
-<img src="https://github.com/user-attachments/assets/6df63185-783f-4ddd-ac43-9b20b82f1eb8" alt="Vivant Screenshot — Reading View" width="90%" />
-
-</div>
-
----
-
-## Status
-
-Vivant is in early development. Expect bugs and breaking changes.
+</p>
 
 ---
 

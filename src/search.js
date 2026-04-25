@@ -16,7 +16,7 @@ export function init({ onJump }) {
 
   document.getElementById("search-input").addEventListener("input", (e) => {
     clearTimeout(_debounce);
-    _debounce = setTimeout(() => runSearch(e.target.value.trim()), 280);
+    _debounce = setTimeout(() => runSearch(e.target.value.trim()), SEARCH_DEBOUNCE_MS);
   });
 
   document.getElementById("btn-search-close").addEventListener("click", close);

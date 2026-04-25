@@ -2,7 +2,7 @@
 import * as api from "./api.js";
 import * as ann from "./annotations.js";
 import * as search from "./search.js";
-import { esc, toast } from "./ui.js";
+import { esc, clamp, toast } from "./ui.js";
 import { initImageViewer, openImageViewer, isImageViewerOpen } from "./image-viewer.js";
 import { flashAnnotationHit, flashSearchHit } from "./text-match.js";
 import { buildResumeLocator, applyResumeLocator, readResumeLocator, writeResumeLocator } from "./resume-locator.js";
@@ -35,6 +35,10 @@ let _edgePageIntentAt = 0;
 let _readerActive = false;
 let _skipExternalLinkConfirmForSession = false;
 
+/** @type {Map<string, import('./api.js').ChapterContent>} */
+const _chapterCache = new Map();
+const CHAPTER_CACHE_MAX = 50;
+
 
 const AUTO_PAGE_THRESHOLD_PX = 56;
 const AUTO_PAGE_COOLDOWN_MS = 420;
@@ -42,6 +46,11 @@ const AUTO_PAGE_WHEEL_INTENT_MS = 450;
 const PROGRESS_SAVE_DEBOUNCE_MS = 500;
 const EDGE_PAGE_INTENT_WINDOW_MS = 1800;
 const EDGE_PAGE_INTENT_MIN_GAP_MS = 150;
+
+const RESTORE_SUSPEND_MS = 1200;
+const NAV_SUSPEND_MS = 300;
+const REFINE_RETRY_DELAYS = [240, 350, 900];
+const ANCHOR_SCROLL_RETRY_DELAYS = [180, 520];
 
 // --- Initialize reader interactions ---
 
@@ -148,51 +157,75 @@ export function setActive(isActive) {
 export async function openBook(b) {
   timer.setBook(null);
 
+  // Fresh book = fresh chapter cache.
+  _chapterCache.clear();
+
   book = b;
   chapterIdx = b.progress_chapter ?? 0;
   let restoreScrollPct = 0;
-  let restoreLocator = null;
+  let restoreLocator = readResumeLocator(book.id);
 
-  try {
-    toc = await api.getToc(b.file_path);
+  // Synchronous initial values
+  if (restoreLocator && Number.isFinite(restoreLocator.chapterIdx)) {
+    chapterIdx = clampChapterIndex(restoreLocator.chapterIdx);
+    if (Number.isFinite(restoreLocator.scrollPct)) {
+      restoreScrollPct = clamp(restoreLocator.scrollPct, 0, 1);
+    }
+  } else {
+    // If no locator, use initial book progress passed in list 
+    // it will be updated when getProgress completes if necessary, but this gives instant first render
+  }
+
+  // Render chapter immediately!
+  let chapterRenderPromise = loadChapter(chapterIdx, {
+    scrollTarget: "restore",
+    restoreScrollPct,
+    restoreLocator,
+  }).catch(() => {});
+
+  // Fetch the rest in parallel
+  const [tocResult, progResult, annResult] = await Promise.allSettled([
+    api.getToc(b.file_path),
+    api.getProgress(b.id),
+    ann.load(b.id)
+  ]);
+
+  if (tocResult.status === 'fulfilled') {
+    toc = tocResult.value;
     chapterTotal = toc.length || 1;
     ann.setToc(toc);
-  } catch {
+  } else {
     toc = [];
     chapterTotal = 1;
   }
 
-  try {
-    const prog = await api.getProgress(b.id);
-    if (prog) {
-      chapterIdx = prog.chapter_idx;
-      restoreScrollPct = clamp(prog.scroll_pct ?? 0, 0, 1);
-    }
-  } catch {
-    // Reading should still open even if persisted progress is unavailable.
-  }
+  let finalChapterIdx = chapterIdx;
+  let finalRestoreScrollPct = restoreScrollPct;
 
-  restoreLocator = readResumeLocator(book.id);
-
-  if (restoreLocator && Number.isFinite(restoreLocator.chapterIdx)) {
-    const locatorChapter = restoreLocator.chapterIdx;
-    chapterIdx = clampChapterIndex(locatorChapter);
-    if (Number.isFinite(restoreLocator.scrollPct)) {
-      restoreScrollPct = clamp(restoreLocator.scrollPct, 0, 1);
+  if (progResult.status === 'fulfilled' && progResult.value) {
+    const prog = progResult.value;
+    // Only apply DB progress if we didn't have a valid resume locator 
+    if (!restoreLocator || !Number.isFinite(restoreLocator.chapterIdx)) {
+        finalChapterIdx = prog.chapter_idx;
+        finalRestoreScrollPct = clamp(prog.scroll_pct ?? 0, 0, 1);
     }
   }
 
-  chapterIdx = clampChapterIndex(chapterIdx);
+  chapterIdx = clampChapterIndex(finalChapterIdx);
   progressUI.rebuildChapterTooltipTitles();
 
   setTocData(toc, chapterIdx);
   renderToc();
-  await ann.load(b.id);
-  await loadChapter(chapterIdx, {
-    scrollTarget: "restore",
-    restoreScrollPct,
-    restoreLocator,
-  });
+
+  // If the chapter index changed because of the parallel progress fetch, we load again.
+  // This is rare since we use book.progress_chapter or resumeLocator initially.
+  if (chapterIdx !== finalChapterIdx) {
+      await loadChapter(chapterIdx, {
+        scrollTarget: "restore",
+        restoreScrollPct: finalRestoreScrollPct,
+        restoreLocator,
+      });
+  }
 
   timer.setBook(book);
   if (_readerActive) timer.start();
@@ -219,7 +252,17 @@ export async function loadChapter(idx, opts = {}) {
     `<div class="empty-state"><div class="empty-state-sub">Loading…</div></div>`;
 
   try {
-    const ch = await api.getChapter(book.file_path, idx);
+    const cacheKey = `${book.file_path}::${idx}`;
+    let ch = _chapterCache.get(cacheKey);
+    if (!ch) {
+      ch = await api.getChapter(book.file_path, idx);
+      // LRU eviction: delete oldest entry when cache is full.
+      if (_chapterCache.size >= CHAPTER_CACHE_MAX) {
+        const oldest = _chapterCache.keys().next().value;
+        _chapterCache.delete(oldest);
+      }
+      _chapterCache.set(cacheKey, ch);
+    }
     renderChapter(ch, scrollTarget, restoreScrollPct, restoreLocator, highlightQuery, highlightQuote, anchorTarget);
   } catch (err) {
     document.getElementById("chapter-content").innerHTML = `
@@ -239,8 +282,6 @@ function renderChapter(
   highlightQuote = "",
   anchorTarget = ""
 ) {
-  const pct = chapterProgressPct(ch.index);
-
   progressUI.clearHoverFrame();
   progressUI.hideTooltip(true);
   progressUI.clearWheelTarget();
@@ -250,79 +291,13 @@ function renderChapter(
     <div class="chapter-body">${ch.html}</div>`;
 
   links.attach(document.querySelector(".chapter-body"));
-
   convertLocalImageUrls();
+  setupImageErrorHandling();
 
-  // Hide broken inline images to prevent layout glitches in reader flow.
-  const images = document.querySelectorAll('.chapter-body img');
-  images.forEach((img) => {
-    img.addEventListener('error', () => {
-      img.style.display = 'none';
-    });
-
-    img.addEventListener('load', () => {
-      img.style.opacity = '1';
-    });
-  });
-
-  document.getElementById("reader-book-title").textContent = book.title;
-  document.getElementById("reader-chapter-title").textContent = ch.title;
-  progressUI.updateDisplay(pct, ch.index);
-  document.getElementById("btn-prev").disabled = ch.index === 0;
-  document.getElementById("btn-next").disabled = ch.index >= chapterTotal - 1;
-
-  setTocData(toc, chapterIdx);
-  renderToc();
+  updateReaderUI(ch);
 
   const readingArea = document.getElementById("reading-area");
-  const restoreForChapter =
-    restoreLocator && Number.isFinite(restoreLocator.chapterIdx) && restoreLocator.chapterIdx === ch.index
-      ? restoreLocator
-      : null;
-
-  // Suppress auto-pagination while programmatic restore scroll is settling.
-  const suspendDuration = scrollTarget === "restore" ? 1200 : 300;
-  _suspendAutoPageUntil = Date.now() + suspendDuration;
-
-  if (scrollTarget === "restore") {
-    // Apply percentage first, then refine by element for stable resume behavior.
-    applyScrollPct(readingArea, restoreScrollPct);
-
-    const refinePosition = () => {
-      if (restoreForChapter) {
-        applyResumeLocator(readingArea, restoreForChapter, scroll => { _lastScrollTop = scroll; });
-      }
-    };
-
-    requestAnimationFrame(() => {
-      applyScrollPct(readingArea, restoreScrollPct);
-      refinePosition();
-    });
-
-    // Re-apply once fonts/resources settle to reduce visual jumps.
-    setTimeout(() => {
-      applyScrollPct(readingArea, restoreScrollPct);
-      refinePosition();
-    }, 240);
-
-    if (restoreForChapter) {
-      setTimeout(() => refinePosition(), 350);
-      setTimeout(() => refinePosition(), 900);
-
-      document.querySelectorAll(".chapter-body img").forEach((img) => {
-        if (img.complete) return;
-        img.addEventListener("load", () => {
-          if (Date.now() < _suspendAutoPageUntil) {
-            refinePosition();
-          }
-        }, { once: true });
-      });
-    }
-  } else if (scrollTarget === "bottom") {
-    readingArea.scrollTop = Math.max(0, readingArea.scrollHeight - readingArea.clientHeight - 2);
-  } else {
-    readingArea.scrollTop = 0;
-  }
+  const suspendDuration = applyScrollRestore(readingArea, scrollTarget, restoreScrollPct, restoreLocator, ch);
 
   if (anchorTarget) {
     queueAnchorScroll(anchorTarget);
@@ -330,29 +305,15 @@ function renderChapter(
 
   _lastScrollTop = readingArea.scrollTop;
 
-  // Delay save after restore so persisted progress reflects final settled position.
   if (scrollTarget !== "restore") {
     persistProgress();
   } else {
     clearTimeout(_saveTimer);
-    const saveDelay = Math.max(
-      PROGRESS_SAVE_DEBOUNCE_MS,
-      (suspendDuration + 50),
-    );
+    const saveDelay = Math.max(PROGRESS_SAVE_DEBOUNCE_MS, suspendDuration + 50);
     _saveTimer = setTimeout(persistProgress, saveDelay);
   }
 
-  if (highlightQuote || highlightQuery) {
-    requestAnimationFrame(() => {
-      const flashed =
-        (highlightQuote && flashAnnotationHit(highlightQuote))
-        || (highlightQuery && flashSearchHit(highlightQuery));
-      if (flashed) {
-        clearTimeout(_saveTimer);
-        _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
-      }
-    });
-  }
+  scheduleHighlightSave(highlightQuote, highlightQuery);
 }
 
 
@@ -373,8 +334,8 @@ function queueAnchorScroll(anchor) {
 
   requestAnimationFrame(() => {
     if (attempt()) return;
-    setTimeout(attempt, 180);
-    setTimeout(attempt, 520);
+    setTimeout(attempt, ANCHOR_SCROLL_RETRY_DELAYS[0]);
+    setTimeout(attempt, ANCHOR_SCROLL_RETRY_DELAYS[1]);
   });
 }
 
@@ -401,7 +362,7 @@ function findAnchorElement(anchor) {
   );
 }
 
-function normalizeAnchorTarget(anchor) {
+export function normalizeAnchorTarget(anchor) {
   const raw = String(anchor ?? "").trim().replace(/^#/, "");
   if (!raw) return "";
   try {
@@ -634,10 +595,6 @@ export function openSearch() {
 
 // --- Utilities ---
 
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
-}
-
 function clampChapterIndex(idx) {
   const n = Number.isFinite(idx) ? Math.trunc(idx) : 0;
   const max = Math.max(0, chapterTotal - 1);
@@ -653,5 +610,95 @@ function applyScrollPct(readingArea, pct) {
   const maxScroll = readingArea.scrollHeight - readingArea.clientHeight;
   const targetScroll = p * maxScroll;
   readingArea.scrollTop = targetScroll;
+}
+
+function setupImageErrorHandling() {
+  const images = document.querySelectorAll('.chapter-body img');
+  images.forEach((img) => {
+    img.addEventListener('error', () => {
+      img.style.display = 'none';
+    });
+
+    img.addEventListener('load', () => {
+      img.style.opacity = '1';
+    });
+  });
+}
+
+function updateReaderUI(ch) {
+  const pct = chapterProgressPct(ch.index);
+
+  document.getElementById("reader-book-title").textContent = book.title;
+  document.getElementById("reader-chapter-title").textContent = ch.title;
+  progressUI.updateDisplay(pct, ch.index);
+  document.getElementById("btn-prev").disabled = ch.index === 0;
+  document.getElementById("btn-next").disabled = ch.index >= chapterTotal - 1;
+
+  setTocData(toc, chapterIdx);
+  renderToc();
+}
+
+function applyScrollRestore(readingArea, scrollTarget, restoreScrollPct, restoreLocator, ch) {
+  const restoreForChapter =
+    restoreLocator && Number.isFinite(restoreLocator.chapterIdx) && restoreLocator.chapterIdx === ch.index
+      ? restoreLocator
+      : null;
+
+  const suspendDuration = scrollTarget === "restore" ? RESTORE_SUSPEND_MS : NAV_SUSPEND_MS;
+  _suspendAutoPageUntil = Date.now() + suspendDuration;
+
+  if (scrollTarget === "restore") {
+    applyScrollPct(readingArea, restoreScrollPct);
+
+    const refinePosition = () => {
+      if (restoreForChapter) {
+        applyResumeLocator(readingArea, restoreForChapter, scroll => { _lastScrollTop = scroll; });
+      }
+    };
+
+    requestAnimationFrame(() => {
+      applyScrollPct(readingArea, restoreScrollPct);
+      refinePosition();
+    });
+
+    setTimeout(() => {
+      applyScrollPct(readingArea, restoreScrollPct);
+      refinePosition();
+    }, REFINE_RETRY_DELAYS[0]);
+
+    if (restoreForChapter) {
+      setTimeout(() => refinePosition(), REFINE_RETRY_DELAYS[1]);
+      setTimeout(() => refinePosition(), REFINE_RETRY_DELAYS[2]);
+
+      document.querySelectorAll(".chapter-body img").forEach((img) => {
+        if (img.complete) return;
+        img.addEventListener("load", () => {
+          if (Date.now() < _suspendAutoPageUntil) {
+            refinePosition();
+          }
+        }, { once: true });
+      });
+    }
+  } else if (scrollTarget === "bottom") {
+    readingArea.scrollTop = Math.max(0, readingArea.scrollHeight - readingArea.clientHeight - 2);
+  } else {
+    readingArea.scrollTop = 0;
+  }
+
+  return suspendDuration;
+}
+
+function scheduleHighlightSave(highlightQuote, highlightQuery) {
+  if (!highlightQuote && !highlightQuery) return;
+
+  requestAnimationFrame(() => {
+    const flashed =
+      (highlightQuote && flashAnnotationHit(highlightQuote))
+      || (highlightQuery && flashSearchHit(highlightQuery));
+    if (flashed) {
+      clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
+    }
+  });
 }
 

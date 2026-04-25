@@ -1,7 +1,9 @@
 /** Manages library state, rendering, import, deletion, and sort behavior. */
 import * as api from "./api.js";
 import * as bookinfo from "./bookinfo.js";
-import { esc, emptyState, fallbackCover, toast } from "./ui.js";
+import { esc, emptyState, fallbackCover, toast, LIBRARY_SEARCH_DEBOUNCE_MS } from "./ui.js";
+
+const DELETE_DIALOG_CLOSE_DELAY_MS = 120;
 
 let tauriDropUnlisten = null;
 
@@ -29,7 +31,7 @@ const SORT_OPTIONS = [
 ];
 
 /** Filter books by search query across title and author. */
-function filterBooks(booksArray, query) {
+export function filterBooks(booksArray, query) {
   if (!query) return booksArray;
   const q = query.toLowerCase();
   return booksArray.filter((book) =>
@@ -48,11 +50,13 @@ export function init({ onOpen }) {
   const importBtn = document.getElementById("btn-import");
   importBtn.addEventListener("click", openFilePicker);
 
+  let _searchDebounce = null;
   const searchInput = document.getElementById("lib-search-input");
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       searchQuery = e.target.value.trim();
-      render();
+      clearTimeout(_searchDebounce);
+      _searchDebounce = setTimeout(() => requestAnimationFrame(render), LIBRARY_SEARCH_DEBOUNCE_MS);
     });
   }
 
@@ -129,7 +133,7 @@ async function setupTauriDropListener(libView, resetDragState) {
   }
 }
 
-function normalizeEpubPaths(paths) {
+export function normalizeEpubPaths(paths) {
   return paths
     .filter((path) => typeof path === "string")
     .map((path) => path.trim())
@@ -179,8 +183,7 @@ export function render() {
 
   syncSortDropdown();
 
-  const filteredBooks = filterBooks(books, searchQuery);
-  applySort(filteredBooks);
+  const filteredBooks = getFilteredAndSortedBooks();
 
   const inprog = filteredBooks.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
   meta.textContent = `${filteredBooks.length} book${filteredBooks.length !== 1 ? "s" : ""} · ${inprog} in progress`;
@@ -190,11 +193,28 @@ export function render() {
     return;
   }
 
-  grid.innerHTML = filteredBooks.map((b, i) => `
+  grid.innerHTML = filteredBooks.map((b) => buildBookCard(b)).join("");
+
+  grid.querySelectorAll(".book-card").forEach((card) => {
+    const bookId = card.dataset.bookId;
+    const book = books.find(b => b.id === bookId);
+    if (!book) return;
+    attachBookCardHandlers(card, book);
+  });
+}
+
+function applySort(booksArray) {
+  const option = SORT_OPTIONS[sortIndex] || SORT_OPTIONS[0];
+  booksArray.sort(option.compare);
+}
+
+/** Returns HTML string for a single book card. */
+function buildBookCard(b) {
+  return `
     <div class="book-card" data-book-id="${esc(b.id)}">
       <div class="book-cover">
         ${b.cover_b64
-          ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" decoding="sync" />`
+          ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy" decoding="async" />`
           : fallbackCover(b.title)}
         <div class="book-cover-overlay">
           <button class="overlay-btn play-btn" title="Open book" aria-label="Open book">
@@ -222,48 +242,44 @@ export function render() {
           <line x1="11" y1="3" x2="3" y2="11"></line>
         </svg>
       </button>
-    </div>`).join("");
-
-  grid.querySelectorAll(".book-card").forEach((card) => {
-    const bookId = card.dataset.bookId;
-    const book = books.find(b => b.id === bookId);
-    if (!book) return;
-
-    const playBtn = card.querySelector(".play-btn");
-    const infoBtn = card.querySelector(".info-btn");
-
-    card.addEventListener("click", (e) => {
-      if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
-        onOpenBook(book);
-      }
-    });
-
-    playBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      onOpenBook(book);
-    });
-
-    infoBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      showBookInfo(book);
-    });
-  });
-
-  // Use event-level stopPropagation so delete does not open the book.
-  grid.querySelectorAll(".delete-btn").forEach((btn) =>
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const bookId = btn.dataset.bookId;
-      if (await confirmDeleteBook()) {
-        deleteBookItem(bookId);
-      }
-    })
-  );
+    </div>`;
 }
 
-function applySort(booksArray) {
-  const option = SORT_OPTIONS[sortIndex] || SORT_OPTIONS[0];
-  booksArray.sort(option.compare);
+/** Attaches click handlers to a rendered book card. */
+function attachBookCardHandlers(card, book) {
+  const playBtn = card.querySelector(".play-btn");
+  const infoBtn = card.querySelector(".info-btn");
+
+  card.addEventListener("click", (e) => {
+    if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
+      onOpenBook(book);
+    }
+  });
+
+  playBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onOpenBook(book);
+  });
+
+  infoBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showBookInfo(book);
+  });
+
+  const deleteBtn = card.querySelector(".delete-btn");
+  deleteBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (await confirmDeleteBook()) {
+      deleteBookItem(book.id);
+    }
+  });
+}
+
+/** Returns filtered and sorted books ready for rendering. */
+function getFilteredAndSortedBooks() {
+  const filtered = filterBooks(books, searchQuery);
+  applySort(filtered);
+  return filtered;
 }
 
 function initSortDropdown() {
@@ -387,7 +403,7 @@ function showDeleteBookConfirm() {
       setTimeout(() => {
         overlay.remove();
         resolve(approved);
-      }, 120);
+      }, DELETE_DIALOG_CLOSE_DELAY_MS);
     };
 
     const onKeyDown = (event) => {
@@ -444,7 +460,7 @@ function upsert(book) {
   else books.unshift(book);
 }
 
-function progressLabel(b) {
+export function progressLabel(b) {
   if (b.progress_pct <= 0)   return "Not started";
   if (b.progress_pct >= 100) return "✓ Finished";
   return `${Math.round(b.progress_pct)}% read`;

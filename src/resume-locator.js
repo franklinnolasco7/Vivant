@@ -1,8 +1,9 @@
-const RESUME_LOCATOR_STORAGE_KEY = "vivant.resume-locators.v1";
+import { clamp } from "./ui.js";
 
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
-}
+const RESUME_LOCATOR_STORAGE_KEY = "vivant.resume-locators.v1";
+const LOCATOR_TEXT_HINT_MAX = 120;
+const LOCATOR_PIXEL_TOLERANCE = 200;
+const LOCATOR_TEXT_SLICE_MAX = 160;
 
 export function buildResumeLocator(readingArea, chapter, scrollPct) {
   const body = document.querySelector(".chapter-body");
@@ -42,7 +43,7 @@ export function buildResumeLocator(readingArea, chapter, scrollPct) {
     scrollTopPx: currentScroll,
     scrollablePx: maxScrollTop,
     path: buildElementPath(target, body),
-    textHint: (target.textContent || "").trim().slice(0, 120),
+    textHint: (target.textContent || "").trim().slice(0, LOCATOR_TEXT_HINT_MAX),
     offsetPx: Math.round(scrollOffsetFromElement),
     savedAt: Date.now(),
   };
@@ -84,7 +85,7 @@ export function applyResumeLocator(readingArea, locator, onScrollTopSet) {
     const wanted = clamp(elementOffsetFromTop + (Number(locator.offsetPx) || 0), 0, maxScrollTop);
 
     // Guard against large jumps when layout differs from the saved snapshot.
-    if (Math.abs(wanted - pxFallback) < 200 || !Number.isFinite(pxFallback)) {
+    if (Math.abs(wanted - pxFallback) < LOCATOR_PIXEL_TOLERANCE || !Number.isFinite(pxFallback)) {
       readingArea.scrollTop = wanted;
       if (onScrollTopSet) onScrollTopSet(readingArea.scrollTop);
       return true;
@@ -193,7 +194,7 @@ export function writeResumeLocator(bookId, locator) {
       scrollTopPx: Number.isFinite(Number(locator.scrollTopPx)) ? Number(locator.scrollTopPx) : null,
       scrollablePx: Number.isFinite(Number(locator.scrollablePx)) ? Number(locator.scrollablePx) : null,
       path: Array.isArray(locator.path) ? locator.path.slice(0, 64) : [],
-      textHint: typeof locator.textHint === "string" ? locator.textHint.slice(0, 160) : "",
+      textHint: typeof locator.textHint === "string" ? locator.textHint.slice(0, LOCATOR_TEXT_SLICE_MAX) : "",
       offsetPx: Math.trunc(Number(locator.offsetPx) || 0),
       savedAt: Number(locator.savedAt) || Date.now(),
     };

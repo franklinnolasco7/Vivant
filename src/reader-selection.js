@@ -36,9 +36,7 @@ export function init(options) {
   });
 }
 
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
-}
+import { clamp } from "./ui.js";
 
 async function saveSelection(note, quoteOverride = "") {
   const sel = window.getSelection();

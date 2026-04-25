@@ -245,62 +245,63 @@ lib.init({
 
 reader.init();
 
-// --- Wire global events ---
+wireGlobalEvents();
 
-document.querySelectorAll(".swatch-btn").forEach((s) =>
-  s.addEventListener("click", () => ui.applyTheme(s.dataset.theme))
-);
+function wireGlobalEvents() {
+  document.querySelectorAll(".swatch-btn").forEach((s) =>
+    s.addEventListener("click", () => ui.applyTheme(s.dataset.theme))
+  );
 
-document.querySelectorAll(".tab").forEach((tab) =>
-  tab.addEventListener("click", () => switchView(tab.dataset.view))
-);
+  document.querySelectorAll(".tab").forEach((tab) =>
+    tab.addEventListener("click", () => switchView(tab.dataset.view))
+  );
 
-document.getElementById("btn-search").addEventListener("click", () => {
-  if (currentView === "reader" && hasActiveBook) reader.openSearch();
-});
+  document.getElementById("btn-search").addEventListener("click", () => {
+    if (currentView === "reader" && hasActiveBook) reader.openSearch();
+  });
 
-// Window controls call backend commands because the title bar is custom.
-document.getElementById("btn-min").addEventListener("click",   () => api.windowMinimize());
-document.getElementById("btn-max").addEventListener("click",   () => api.windowMaximize());
-document.getElementById("btn-close").addEventListener("click", () => api.windowClose());
+  document.getElementById("btn-min").addEventListener("click",   () => api.windowMinimize());
+  document.getElementById("btn-max").addEventListener("click",   () => api.windowMaximize());
+  document.getElementById("btn-close").addEventListener("click", () => api.windowClose());
 
-document.addEventListener("keydown", (e) => {
-  const inInput = e.target.matches("input, textarea");
+  document.addEventListener("keydown", (e) => {
+    const inInput = e.target.matches("input, textarea");
 
-  if (e.key === "Escape") {
-    if (search.isOpen()) search.close();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-    e.preventDefault();
-
-    if (currentView === "library") {
-      const librarySearch = document.getElementById("lib-search-input");
-      librarySearch?.focus();
-      librarySearch?.select();
+    if (e.key === "Escape") {
+      if (search.isOpen()) search.close();
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      e.preventDefault();
 
-    if (currentView === "reader" && hasActiveBook) {
-      reader.openSearch();
+      if (currentView === "library") {
+        const librarySearch = document.getElementById("lib-search-input");
+        librarySearch?.focus();
+        librarySearch?.select();
+        return;
+      }
+
+      if (currentView === "reader" && hasActiveBook) {
+        reader.openSearch();
+      }
+      return;
     }
-    return;
-  }
-  if (!inInput && e.key === "ArrowRight") reader.loadChapter && document.getElementById("btn-next").click();
-  if (!inInput && e.key === "ArrowLeft")  reader.loadChapter && document.getElementById("btn-prev").click();
-});
+    if (!inInput && e.key === "ArrowRight") reader.loadChapter && document.getElementById("btn-next").click();
+    if (!inInput && e.key === "ArrowLeft")  reader.loadChapter && document.getElementById("btn-prev").click();
+  });
 
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      reader.flushProgress?.();
+    }
+  });
+
+  window.addEventListener("beforeunload", () => {
     reader.flushProgress?.();
-  }
-});
+  });
+}
 
-window.addEventListener("beforeunload", () => {
-  reader.flushProgress?.();
-});
 
-// --- Switch active view ---
 
 function switchView(view) {
   if (view === "reader" && !hasActiveBook) {

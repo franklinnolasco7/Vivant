@@ -31,6 +31,9 @@ pub async fn import_epub(
         .app_cache_dir()
         .map_err(|e| Error::Io(e.to_string()).to_string())?;
 
+    // Invalidate cached TOC so re-import picks up any structural changes.
+    epub::invalidate_toc_cache(p);
+
     let path_clone = path.clone();
     let meta = tokio::task::spawn_blocking(move || {
         let p_blocking = std::path::Path::new(&path_clone);
@@ -57,6 +60,11 @@ pub async fn import_epub(
     )
     .map_err(|e| e.to_string())?;
 
+    // Parse and cache TOC in DB at import time so opening the book is instant.
+    if let Ok(toc) = epub::parse_toc(p) {
+        library::save_book_toc(&pool, &id, &toc).ok();
+    }
+
     library::all_books(&pool)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -71,6 +79,7 @@ pub async fn get_library(pool: State<'_, DbPool>) -> CommandResult<Vec<library::
     library::backfill_chapter_counts(&pool).ok();
     library::backfill_book_metadata(&pool).ok();
     library::backfill_book_covers(&pool).ok();
+    library::backfill_book_toc(&pool).ok();
     into_command_result(library::all_books(&pool))
 }
 
@@ -86,7 +95,14 @@ pub async fn delete_book(
 // ── Reading ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn get_toc(file_path: String) -> CommandResult<Vec<epub::TocEntry>> {
+pub async fn get_toc(
+    pool: State<'_, DbPool>,
+    file_path: String,
+) -> CommandResult<Vec<epub::TocEntry>> {
+    // Try DB cache first (instant), fall back to EPUB parsing.
+    if let Ok(Some(toc)) = library::get_book_toc(&pool, &file_path) {
+        return Ok(toc);
+    }
     into_command_result(epub::parse_toc(std::path::Path::new(&file_path)))
 }
 

@@ -1,13 +1,19 @@
 use crate::error::{Error, Result};
 use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 use std::time::UNIX_EPOCH;
 use zip::ZipArchive;
+
+/// In-process cache for parsed TOC entries, keyed by canonical book path.
+/// Avoids re-opening the zip and walking the nav tree on every chapter load.
+static TOC_CACHE: LazyLock<Mutex<HashMap<PathBuf, Vec<TocEntry>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BookMeta {
@@ -104,7 +110,7 @@ fn first_meta_value(
 }
 
 pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
-    let doc = open(path)?;
+    let mut doc = open(path)?;
     let spine_ids: Vec<String> = doc.spine.iter().map(|s| s.idref.clone()).collect();
     let total = doc.get_num_chapters();
     let toc_items = doc.toc.clone();
@@ -150,80 +156,122 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
         merged.entry(e.chapter_idx).or_insert(e);
     }
 
-    // Fill unmapped chapters with generated labels (e.g., "Section 42") so spine count
-    // matches TOC length—UI depends on this for accurate chapter navigation.
-    for i in 0..total {
-        merged.entry(i).or_insert_with(|| {
-            let label = fallback_chapter_label(i, &spine_ids, path);
-            TocEntry { label, chapter_idx: i, depth: 0 }
-        });
-    }
+    // Collect indices of unmapped chapters that need fallback labels.
+    let unmapped: Vec<usize> = (0..total).filter(|i| !merged.contains_key(i)).collect();
 
-    Ok(merged.into_values().collect())
-}
-
-fn fallback_chapter_label(
-    idx: usize,
-    spine_ids: &[String],
-    epub_path: &Path,
-) -> String {
-    if let Some(id) = spine_ids.get(idx) {
-        let id_l = id.to_lowercase();
-        let known: &[(&str, &str)] = &[
-            ("cover", "Cover"),
-            ("titlepage", "Title Page"),
-            ("title", "Title Page"),
-            ("preface", "Preface"),
-            ("foreword", "Foreword"),
-            ("introduction", "Introduction"),
-            ("prologue", "Prologue"),
-            ("dedication", "Dedication"),
-            ("epigraph", "Epigraph"),
-            ("contents", "Contents"),
-            ("toc", "Table of Contents"),
-            ("epilogue", "Epilogue"),
-            ("afterword", "Afterword"),
-            ("acknowledgment", "Acknowledgments"),
-            ("acknowledgement", "Acknowledgments"),
-            ("appendix", "Appendix"),
-            ("glossary", "Glossary"),
-            ("bibliography", "Bibliography"),
-            ("index", "Index"),
-            ("copyright", "Copyright"),
-            ("about", "About the Author"),
-            ("notes", "Notes"),
-            ("endnotes", "Endnotes"),
-            ("footnotes", "Footnotes"),
-        ];
-        for (pat, label) in known {
-            if id_l.contains(pat) {
-                return label.to_string();
+    // Fill unmapped chapters: first try spine ID pattern matching, then batch-extract
+    // HTML titles from a SINGLE doc open (instead of opening a new zip per chapter).
+    let mut html_titles: HashMap<usize, String> = HashMap::new();
+    if !unmapped.is_empty() {
+        // Batch-extract heading titles from all unmapped chapters in one pass.
+        for &idx in &unmapped {
+            // Try spine ID-based label first (cheap, no I/O).
+            if fallback_label_from_spine_id(idx, &spine_ids).is_some() {
+                continue; // Will be handled below.
+            }
+            // Extract title from chapter HTML using the already-open doc.
+            doc.set_current_chapter(idx);
+            if let Some((raw, _)) = doc.get_current_str() {
+                if let Some(title) = extract_heading_from_html(&raw) {
+                    html_titles.insert(idx, title);
+                }
             }
         }
     }
 
-    // Try extracting a title from the chapter HTML.
-    if let Some(label) = extract_chapter_title_from_html(idx, epub_path) {
-        return label;
+    for i in 0..total {
+        merged.entry(i).or_insert_with(|| {
+            let label = if let Some(l) = fallback_label_from_spine_id(i, &spine_ids) {
+                l
+            } else if let Some(l) = html_titles.remove(&i) {
+                l
+            } else {
+                format!("Section {}", i + 1)
+            };
+            TocEntry { label, chapter_idx: i, depth: 0 }
+        });
     }
 
-    format!("Section {}", idx + 1)
+    let result: Vec<TocEntry> = merged.into_values().collect();
+
+    // Populate the in-process cache so subsequent calls (e.g. from get_chapter) are free.
+    if let Ok(canonical) = fs::canonicalize(path) {
+        if let Ok(mut cache) = TOC_CACHE.lock() {
+            cache.insert(canonical, result.clone());
+        }
+    }
+
+    Ok(result)
 }
 
-/// Pull a usable label from the chapter's first heading element.
-fn extract_chapter_title_from_html(idx: usize, epub_path: &Path) -> Option<String> {
-    let mut doc = EpubDoc::new(epub_path).ok()?;
-    doc.set_current_chapter(idx);
-    let (raw, _) = doc.get_current_str()?;
+/// Return cached TOC if available, otherwise parse and cache.
+pub fn cached_toc(path: &Path) -> Result<Vec<TocEntry>> {
+    if let Ok(canonical) = fs::canonicalize(path) {
+        if let Ok(cache) = TOC_CACHE.lock() {
+            if let Some(entries) = cache.get(&canonical) {
+                return Ok(entries.clone());
+            }
+        }
+    }
+    parse_toc(path)
+}
 
+/// Remove a book's TOC from cache (e.g. after re-import).
+pub fn invalidate_toc_cache(path: &Path) {
+    if let Ok(canonical) = fs::canonicalize(path) {
+        if let Ok(mut cache) = TOC_CACHE.lock() {
+            cache.remove(&canonical);
+        }
+    }
+}
+
+/// Try to derive a label from the spine ID pattern (no I/O needed).
+fn fallback_label_from_spine_id(idx: usize, spine_ids: &[String]) -> Option<String> {
+    let id = spine_ids.get(idx)?;
+    let id_l = id.to_lowercase();
+    let known: &[(&str, &str)] = &[
+        ("cover", "Cover"),
+        ("titlepage", "Title Page"),
+        ("title", "Title Page"),
+        ("preface", "Preface"),
+        ("foreword", "Foreword"),
+        ("introduction", "Introduction"),
+        ("prologue", "Prologue"),
+        ("dedication", "Dedication"),
+        ("epigraph", "Epigraph"),
+        ("contents", "Contents"),
+        ("toc", "Table of Contents"),
+        ("epilogue", "Epilogue"),
+        ("afterword", "Afterword"),
+        ("acknowledgment", "Acknowledgments"),
+        ("acknowledgement", "Acknowledgments"),
+        ("appendix", "Appendix"),
+        ("glossary", "Glossary"),
+        ("bibliography", "Bibliography"),
+        ("index", "Index"),
+        ("copyright", "Copyright"),
+        ("about", "About the Author"),
+        ("notes", "Notes"),
+        ("endnotes", "Endnotes"),
+        ("footnotes", "Footnotes"),
+    ];
+    for (pat, label) in known {
+        if id_l.contains(pat) {
+            return Some(label.to_string());
+        }
+    }
+    None
+}
+
+/// Extract the first heading (h1-h4) text from chapter HTML.
+fn extract_heading_from_html(html: &str) -> Option<String> {
     for tag in &["h1", "h2", "h3", "h4"] {
-        if let Some(t) = extract_tag_text(&raw, tag) {
+        if let Some(t) = extract_tag_text(html, tag) {
             if !t.is_empty() {
                 return Some(t);
             }
         }
     }
-
     None
 }
 
@@ -266,12 +314,15 @@ pub fn get_chapter_html_with_cache(
     log::info!("Chapter HTML (first 500 bytes): {}", snippet);
 
     let spine_ids: Vec<String> = doc.spine.iter().map(|s| s.idref.clone()).collect();
-    let toc = parse_toc(path).unwrap_or_default();
+    let toc = cached_toc(path).unwrap_or_default();
     let title = toc
         .iter()
         .find(|e| e.chapter_idx == chapter_idx)
         .map(|e| e.label.clone())
-        .unwrap_or_else(|| fallback_chapter_label(chapter_idx, &spine_ids, path));
+        .unwrap_or_else(|| {
+            fallback_label_from_spine_id(chapter_idx, &spine_ids)
+                .unwrap_or_else(|| format!("Section {}", chapter_idx + 1))
+        });
 
     Ok(ChapterContent { index: chapter_idx, title, html })
 }

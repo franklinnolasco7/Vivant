@@ -17,6 +17,7 @@ let _chapterTooltipTitles = [];
 
 const PROGRESS_WHEEL_STEP_THRESHOLD = 110;
 const PROGRESS_TOOLTIP_VIEWPORT_MARGIN_PX = 8;
+const PROGRESS_SAVE_DEBOUNCE_MS = 120;
 
 let ctx = null;
 
@@ -209,7 +210,7 @@ function onProgressWheel(event) {
     }
 
     void ctx.loadChapter(pendingTarget, { scrollTarget: "top" });
-  }, 120);
+  }, PROGRESS_SAVE_DEBOUNCE_MS);
 }
 
 function progressPctFromClientX(progressBar, clientX) {
