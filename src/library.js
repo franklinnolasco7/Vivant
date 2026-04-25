@@ -103,6 +103,8 @@ export function init({ onOpen }) {
 
   // Listen for native OS drag-drop events in desktop context to support native file manager drops
   setupTauriDropListener(libView, resetDragState);
+
+  document.addEventListener("vivant:library-changed", load);
 }
 
 async function setupTauriDropListener(libView, resetDragState) {

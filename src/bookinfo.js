@@ -2,6 +2,9 @@
 
 import { esc, fallbackCover, toast } from "./ui.js";
 import * as format from "./format.js";
+import * as api from "./api.js";
+
+let currentBook = null;
 
 let backdrop = null;
 let panel = null;
@@ -114,7 +117,7 @@ export function init() {
     close();
   });
   panel.querySelector("#bookinfo-edit").addEventListener("click", () => {
-    toast("Edit details coming soon");
+    if (currentBook) showEditDialog(currentBook);
   });
 
   panel.querySelectorAll(".bookinfo-tab-btn").forEach((btn) => {
@@ -130,6 +133,8 @@ export function init() {
 export function show(book, toc = [], annotations = [], progress = {}, options = {}) {
   if (!panel) init();
   if (!panel) return;
+
+  currentBook = book;
 
   progress = progress || {};
   onContinue = options.onContinue;
@@ -292,4 +297,187 @@ function flattenToc(entries, depth = 0, out = []) {
     }
   }
   return out;
+}
+
+
+async function showEditDialog(book) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "book-edit-dialog";
+  dialog.innerHTML = `
+    <form method="dialog" class="book-edit-form" novalidate>
+      <h3 class="book-edit-title">Edit Book Details</h3>
+      <div class="book-edit-grid">
+        <label><span>Title</span> <input type="text" name="title" value="${esc(book.title || "")}" title="Book title" placeholder="Book title" required /></label>
+        <label><span>Author</span> <input type="text" name="author" value="${esc(book.author || "")}" title="Book author. No numbers allowed." placeholder="Author name" pattern="^[^0-9]*$" /></label>
+        <label><span>Genre</span> <input type="text" name="genre" value="${esc(book.genre || "")}" title="Comma-separated genres. No numbers allowed." placeholder="e.g. Science Fiction, Drama" pattern="^[^0-9]*$" /></label>
+        <label><span>Publisher</span> <input type="text" name="publisher" value="${esc(book.publisher || "")}" title="Book publisher" placeholder="Publisher name" /></label>
+        <label><span>Language</span> <input type="text" name="language" value="${esc(book.language || "")}" title="Language code (e.g. en) or name. No numbers allowed." placeholder="e.g. en, fr, es" pattern="^[^0-9]*$" /></label>
+        <label><span>Published</span> <input type="text" name="published_at" placeholder="YYYY-MM-DD or YYYY" value="${esc(book.published_at || "")}" pattern="^\\d{4}(?:-\\d{2})?(?:-\\d{2})?$" title="Please enter a valid year (YYYY) or date (YYYY-MM-DD)" /></label>
+        <label class="book-edit-fullwidth"><span>Description</span> <textarea name="description" rows="4" title="Book description" placeholder="Brief description or synopsis...">${esc(book.description || "")}</textarea></label>
+      </div>
+      <div class="book-edit-actions">
+        <button type="button" class="nav-btn" id="edit-cancel">Cancel</button>
+        <button type="submit" class="nav-btn">Save</button>
+      </div>
+    </form>
+  `;
+
+  document.body.appendChild(dialog);
+
+  const form = dialog.querySelector("form");
+  const inputs = form.querySelectorAll("input, textarea");
+
+  function clearCustomError(input) {
+    const err = input.parentElement.querySelector(".custom-val-err");
+    if (err) err.remove();
+  }
+
+  function showCustomError(input) {
+    clearCustomError(input);
+    const err = document.createElement("div");
+    err.className = "custom-val-err";
+    err.textContent = input.title || input.validationMessage;
+    input.parentElement.appendChild(err);
+  }
+
+  inputs.forEach(input => {
+    input.addEventListener("invalid", (e) => {
+      e.preventDefault();
+      showCustomError(input);
+    });
+    input.addEventListener("input", () => {
+      if (input.validity.valid) {
+        clearCustomError(input);
+      }
+    });
+  });
+
+  dialog.querySelector("#edit-cancel").addEventListener("click", () => {
+    dialog.close();
+    dialog.remove();
+  });
+
+  dialog.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+
+    const langInput = form.elements.language;
+    const langVal = langInput.value.trim();
+    const langMap = {
+      abkhazian: "ab", afar: "aa", afrikaans: "af", akan: "ak", albanian: "sq",
+      amharic: "am", arabic: "ar", aragonese: "an", armenian: "hy", assamese: "as",
+      avaric: "av", avestan: "ae", aymara: "ay", azerbaijani: "az", bambara: "bm",
+      bashkir: "ba", basque: "eu", belarusian: "be", bengali: "bn", bihari: "bh",
+      bislama: "bi", bosnian: "bs", breton: "br", bulgarian: "bg", burmese: "my",
+      catalan: "ca", chamorro: "ch", chechen: "ce", chichewa: "ny", chinese: "zh",
+      mandarin: "zh", cantonese: "yue", chuvash: "cv", cornish: "kw", corsican: "co",
+      cree: "cr", croatian: "hr", czech: "cs", danish: "da", divehi: "dv",
+      dutch: "nl", flemish: "nl", dzongkha: "dz", english: "en", esperanto: "eo",
+      estonian: "et", ewe: "ee", faroese: "fo", fijian: "fj", finnish: "fi",
+      french: "fr", fula: "ff", galician: "gl", georgian: "ka", german: "de",
+      greek: "el", guarani: "gn", gujarati: "gu", haitian: "ht", hausa: "ha",
+      hebrew: "he", herero: "hz", hindi: "hi", "hiri motu": "ho", hungarian: "hu",
+      interlingua: "ia", indonesian: "id", interlingue: "ie", irish: "ga", igbo: "ig",
+      inupiaq: "ik", ido: "io", icelandic: "is", italian: "it", inuktitut: "iu",
+      japanese: "ja", javanese: "jv", kalaallisut: "kl", kannada: "kn", kanuri: "kr",
+      kashmiri: "ks", kazakh: "kk", khmer: "km", kikuyu: "ki", kinyarwanda: "rw",
+      kirghiz: "ky", komi: "kv", kongo: "kg", korean: "ko", kurdish: "ku",
+      kwanyama: "kj", latin: "la", luxembourgish: "lb", luganda: "lg",
+      limburgish: "li", lingala: "ln", lao: "lo", lithuanian: "lt",
+      "luba-katanga": "lu", latvian: "lv", manx: "gv", macedonian: "mk",
+      malagasy: "mg", malay: "ms", malayalam: "ml", maltese: "mt", maori: "mi",
+      marathi: "mr", marshallese: "mh", mongolian: "mn", nauru: "na", navajo: "nv",
+      ndonga: "nd", nepali: "ne", norwegian: "no", "sichuan yi": "ii", occitan: "oc",
+      ojibwa: "oj", oromo: "om", oriya: "or", ossetian: "os", pali: "pi",
+      pashto: "ps", persian: "fa", farsi: "fa", polish: "pl", portuguese: "pt",
+      punjabi: "pa", quechua: "qu", romanian: "ro", romansh: "rm", rundi: "rn",
+      russian: "ru", "northern sami": "se", samoan: "sm", sango: "sg",
+      sanskrit: "sa", sardinian: "sc", serbian: "sr", shona: "sn", sindhi: "sd",
+      sinhala: "si", slovak: "sk", slovenian: "sl", somali: "so",
+      "southern sotho": "st", spanish: "es", sundanese: "su", swahili: "sw",
+      swati: "ss", swedish: "sv", tamil: "ta", telugu: "te", tajik: "tg",
+      thai: "th", tigrinya: "ti", tibetan: "bo", turkmen: "tk", tagalog: "tl",
+      filipino: "tl", tswana: "tn", tonga: "to", turkish: "tr", tsonga: "ts",
+      tatar: "tt", twi: "tw", tahitian: "ty", uighur: "ug", ukrainian: "uk",
+      urdu: "ur", uzbek: "uz", venda: "ve", vietnamese: "vi", volapük: "vo",
+      walloon: "wa", welsh: "cy", wolof: "wo", "western frisian": "fy", xhosa: "xh",
+      yiddish: "yi", yoruba: "yo", zhuang: "za", zulu: "zu",
+      "scottish gaelic": "gd", gaelic: "gd", breton: "br"
+    };
+
+    if (langVal) {
+      if (/\\d/.test(langVal)) {
+        langInput.setCustomValidity("Language cannot contain numbers");
+      } else {
+        const lowerLang = langVal.toLowerCase();
+        if (!langMap[lowerLang] && !Object.values(langMap).includes(lowerLang)) {
+          langInput.setCustomValidity("Invalid language. Must be a valid language name or code.");
+        } else {
+          langInput.setCustomValidity("");
+        }
+      }
+    } else {
+      langInput.setCustomValidity("");
+    }
+
+    if (!form.checkValidity()) return;
+    const formData = new FormData(form);
+
+    const title = formData.get("title").trim();
+    const author = formData.get("author").trim();
+    const rawGenre = formData.get("genre").trim();
+    const genre = rawGenre ? rawGenre.split(",").map(g => g.trim()).filter(Boolean).join(", ") : null;
+    const publisher = formData.get("publisher").trim() || null;
+    const publishedAt = formData.get("published_at").trim() || null;
+
+    let language = langVal || null;
+    if (language) {
+      const lowerLang = language.toLowerCase();
+      language = langMap[lowerLang] ? langMap[lowerLang] : lowerLang;
+    }
+
+    const update = {
+      id: book.id,
+      title,
+      author: author || "Unknown Author",
+      genre,
+      description: formData.get("description").trim() || null,
+      publisher,
+      language,
+      published_at: publishedAt,
+    };
+
+    try {
+      await api.updateBookMetadata(update);
+      Object.assign(book, update);
+      renderHero(book);
+      // Hack: we don't have toc and progress around, but we can just update the elements manually or close/re-open panel.
+      panel.querySelector("#bookinfo-title").textContent = book.title || "Untitled";
+      const year = format.extractYear(book.published_at || book.added_at);
+      const author = book.author || "Unknown author";
+      panel.querySelector("#bookinfo-authorline").textContent = year ? `${author} · ${year}` : author;
+      
+      const tags = panel.querySelector("#bookinfo-tags");
+      const genreTags = format.toTagList(book.genre);
+      tags.innerHTML = (genreTags.length ? genreTags : ["EPUB"]).slice(0, 3)
+        .map((tag) => `<span class="bookinfo-tag">${esc(tag)}</span>`)
+        .join("");
+
+      panel.querySelector("#detail-publisher").textContent = book.publisher || "-";
+      panel.querySelector("#detail-published").textContent = format.formatDate(book.published_at) || "-";
+      panel.querySelector("#detail-language").textContent = book.language || "-";
+      
+      const description = panel.querySelector("#description");
+      description.innerHTML = format.formatDescriptionHtml(book.description);
+      
+      dialog.close();
+      dialog.remove();
+      toast("Book details updated");
+      document.dispatchEvent(new CustomEvent("vivant:library-changed"));
+    } catch (err) {
+      toast("Failed to update: " + err.message);
+    }
+  });
+
+  dialog.showModal();
 }

@@ -37,6 +37,12 @@ export const importEpub = (path) => call("import_epub", { path });
  */
 export const deleteBook = (bookId) => call("delete_book", { bookId });
 
+/**
+ * Update book metadata.
+ * @param {{ id:string, title:string, author:string, genre?:string|null, description?:string|null, publisher?:string|null, language?:string|null, published_at?:string|null }} update
+ */
+export const updateBookMetadata = (update) => call("update_book_metadata", { update });
+
 // --- Reading ---
 
 /**

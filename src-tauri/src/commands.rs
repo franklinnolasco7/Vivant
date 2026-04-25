@@ -92,6 +92,36 @@ pub async fn delete_book(
     into_command_result(library::delete_book(&pool, &book_id))
 }
 
+#[derive(Deserialize)]
+pub struct BookMetadataUpdate {
+    pub id: String,
+    pub title: String,
+    pub author: String,
+    pub genre: Option<String>,
+    pub description: Option<String>,
+    pub publisher: Option<String>,
+    pub language: Option<String>,
+    pub published_at: Option<String>,
+}
+
+#[tauri::command]
+pub async fn update_book_metadata(
+    pool: State<'_, DbPool>,
+    update: BookMetadataUpdate,
+) -> CommandResult<()> {
+    into_command_result(library::update_book_metadata(
+        &pool,
+        &update.id,
+        &update.title,
+        &update.author,
+        update.genre.as_deref(),
+        update.description.as_deref(),
+        update.publisher.as_deref(),
+        update.language.as_deref(),
+        update.published_at.as_deref(),
+    ))
+}
+
 // ── Reading ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]

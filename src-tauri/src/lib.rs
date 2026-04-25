@@ -90,7 +90,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::import_epub,
-            commands::get_library,            commands::delete_book,            commands::get_chapter,
+            commands::get_library,
+            commands::delete_book,
+            commands::update_book_metadata,
+            commands::get_chapter,
             commands::get_toc,
             commands::resolve_book_link,
             commands::open_external_url,

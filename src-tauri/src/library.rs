@@ -259,6 +259,45 @@ pub fn backfill_book_metadata(pool: &DbPool) -> Result<()> {
     Ok(())
 }
 
+pub fn update_book_metadata(
+    pool: &DbPool,
+    id: &str,
+    title: &str,
+    author: &str,
+    genre: Option<&str>,
+    description: Option<&str>,
+    publisher: Option<&str>,
+    language: Option<&str>,
+    published_at: Option<&str>,
+) -> Result<()> {
+    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+    let updated = conn.execute(
+        "UPDATE books SET
+           title = ?1,
+           author = ?2,
+           genre = ?3,
+           description = ?4,
+           publisher = ?5,
+           language = ?6,
+           published_at = ?7
+         WHERE id = ?8",
+        params![
+            title,
+            author,
+            genre,
+            description,
+            publisher,
+            language,
+            published_at,
+            id
+        ],
+    )?;
+    if updated == 0 {
+        return Err(Error::NotFound(format!("book {id}")));
+    }
+    Ok(())
+}
+
 pub fn backfill_book_covers(pool: &DbPool) -> Result<()> {
     let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
 

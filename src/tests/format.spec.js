@@ -124,8 +124,13 @@ describe("format.js", () => {
       expect(formatDate(undefined)).toBe("");
     });
 
-    it("returns empty for invalid date", () => {
-      expect(formatDate("not-a-date")).toBe("");
+    it("returns raw string for invalid date", () => {
+      expect(formatDate("not-a-date")).toBe("not-a-date");
+    });
+
+    it("returns raw string for just year", () => {
+      expect(formatDate("2026")).toBe("2026");
+      expect(formatDate("2026-05")).toBe("2026-05");
     });
 
     it("formats valid date", () => {

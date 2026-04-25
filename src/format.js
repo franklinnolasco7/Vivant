@@ -21,8 +21,11 @@ export function extractYear(value) {
 
 export function formatDate(value) {
   if (!value) return "";
+  const str = String(value).trim();
+  if (/^\d{4}(?:-\d{2})?$/.test(str)) return str;
+  
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return str;
   return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
