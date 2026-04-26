@@ -14,9 +14,6 @@
   --search-hit-strong: rgba(196, 135, 90, 0.62);
   --search-hit-mid: rgba(196, 135, 90, 0.3);
   --search-hit-low: rgba(196, 135, 90, 0.02);
-  --scrollbar-size-hover: 11px;
-  --scrollbar-thumb-inset: 3px;
-  --scrollbar-thumb-inset-hover: 3px;
   --shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.2);
 }
 .theme-sepia {

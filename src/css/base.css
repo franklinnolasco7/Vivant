@@ -39,20 +39,9 @@ body {
   position: relative;
 }
 
-/* Keep gutter stable so text doesn't shift, while preserving thumb margins on hover. */
-.reading-area,
-.toc-items,
-.ann-list,
-#view-library,
-.bookinfo-content {
-  scrollbar-gutter: stable;
-  scrollbar-width: auto;
-  scrollbar-color: var(--t2) transparent;
-}
-
 ::-webkit-scrollbar {
-  width: var(--scrollbar-size-hover);
-  height: var(--scrollbar-size-hover);
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -68,18 +57,12 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--t2);
   border-radius: 999px;
-  border: var(--scrollbar-thumb-inset) solid transparent;
-  background-clip: content-box;
   min-height: 30px;
-  transition:
-    border-width 0.16s ease,
-    background-color 0.16s ease;
+  transition: background-color 0.16s ease;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--t2);
-  border-width: var(--scrollbar-thumb-inset-hover);
+  background: var(--t1);
 }
 ::-webkit-scrollbar-thumb:active {
-  background: var(--t1);
-  border-width: var(--scrollbar-thumb-inset-hover);
+  background: var(--t0);
 }

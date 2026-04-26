@@ -312,7 +312,7 @@ async function showEditDialog(book) {
         <label><span>Genre</span> <input type="text" name="genre" value="${esc(book.genre || "")}" title="Comma-separated genres. No numbers allowed." placeholder="e.g. Science Fiction, Drama" pattern="^[^0-9]*$" /></label>
         <label><span>Publisher</span> <input type="text" name="publisher" value="${esc(book.publisher || "")}" title="Book publisher" placeholder="Publisher name" /></label>
         <label><span>Language</span> <input type="text" name="language" value="${esc(book.language || "")}" title="Language code (e.g. en) or name. No numbers allowed." placeholder="e.g. en, fr, es" pattern="^[^0-9]*$" /></label>
-        <label><span>Published</span> <input type="text" name="published_at" placeholder="YYYY-MM-DD or YYYY" value="${esc(book.published_at || "")}" pattern="^\\d{4}(?:-\\d{2})?(?:-\\d{2})?$" title="Please enter a valid year (YYYY) or date (YYYY-MM-DD)" /></label>
+        <label><span>Published</span> <input type="text" name="published_at" placeholder="YYYY-MM-DD or YYYY" value="${esc(book.published_at || "")}" pattern="^\\d{4}(?:-\\d{2})?(?:-\\d{2})?(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?)?$" title="Please enter a valid year (YYYY), date (YYYY-MM-DD), or ISO datetime" /></label>
         <label class="book-edit-fullwidth"><span>Description</span> <textarea name="description" rows="4" title="Book description" placeholder="Brief description or synopsis...">${esc(book.description || "")}</textarea></label>
       </div>
       <div class="book-edit-actions">
