@@ -3,8 +3,8 @@ use epub::doc::EpubDoc;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
-use std::io;
 use std::hash::{Hash, Hasher};
+use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::UNIX_EPOCH;
@@ -59,7 +59,10 @@ pub struct SearchResult {
 
 pub fn parse_meta(path: &Path, include_cover: bool) -> Result<BookMeta> {
     let mut doc = open(path)?;
-    let title = doc.mdata("title").map(|m| m.value.clone()).unwrap_or_else(|| stem(path));
+    let title = doc
+        .mdata("title")
+        .map(|m| m.value.clone())
+        .unwrap_or_else(|| stem(path));
     let author = doc
         .mdata("creator")
         .map(|m| m.value.clone())
@@ -130,17 +133,24 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
             let fallback = out.last().map(|e| e.chapter_idx).unwrap_or(0);
             let chapter_idx = doc
                 .resource_uri_to_chapter(&item.content)
-                .or_else(|| spine_ids.iter().position(|id| src_base.contains(id.as_str())))
+                .or_else(|| {
+                    spine_ids
+                        .iter()
+                        .position(|id| src_base.contains(id.as_str()))
+                })
                 .unwrap_or(fallback)
                 .min(total.saturating_sub(1));
-            out.push(TocEntry { label: item.label.trim().to_owned(), chapter_idx, depth });
+            out.push(TocEntry {
+                label: item.label.trim().to_owned(),
+                chapter_idx,
+                depth,
+            });
             walk(&item.children, doc, spine_ids, total, out, depth + 1);
         }
     }
 
     walk(&toc_items, &doc, &spine_ids, total, &mut out, 0);
 
-    // Dedup: TOC walk may produce multiple entries per chapter (nested headings). Keep first occurrence.
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
     for e in out {
@@ -156,20 +166,17 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
         merged.entry(e.chapter_idx).or_insert(e);
     }
 
-    // Collect indices of unmapped chapters that need fallback labels.
     let unmapped: Vec<usize> = (0..total).filter(|i| !merged.contains_key(i)).collect();
 
-    // Fill unmapped chapters: first try spine ID pattern matching, then batch-extract
-    // HTML titles from a SINGLE doc open (instead of opening a new zip per chapter).
+    // Batch-extract heading titles from all unmapped chapters using the already-open doc,
+    // instead of opening a new zip per chapter.
     let mut html_titles: HashMap<usize, String> = HashMap::new();
     if !unmapped.is_empty() {
-        // Batch-extract heading titles from all unmapped chapters in one pass.
         for &idx in &unmapped {
-            // Try spine ID-based label first (cheap, no I/O).
+            // Try spine ID-based label first (no I/O).
             if fallback_label_from_spine_id(idx, &spine_ids).is_some() {
-                continue; // Will be handled below.
+                continue;
             }
-            // Extract title from chapter HTML using the already-open doc.
             doc.set_current_chapter(idx);
             if let Some((raw, _)) = doc.get_current_str() {
                 if let Some(title) = extract_heading_from_html(&raw) {
@@ -188,7 +195,11 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
             } else {
                 format!("Section {}", i + 1)
             };
-            TocEntry { label, chapter_idx: i, depth: 0 }
+            TocEntry {
+                label,
+                chapter_idx: i,
+                depth: 0,
+            }
         });
     }
 
@@ -204,7 +215,6 @@ pub fn parse_toc(path: &Path) -> Result<Vec<TocEntry>> {
     Ok(result)
 }
 
-/// Return cached TOC if available, otherwise parse and cache.
 pub fn cached_toc(path: &Path) -> Result<Vec<TocEntry>> {
     if let Ok(canonical) = fs::canonicalize(path) {
         if let Ok(cache) = TOC_CACHE.lock() {
@@ -285,7 +295,11 @@ fn extract_tag_text(html: &str, tag: &str) -> Option<String> {
     let end = lower[after_open..].find(&close)? + after_open;
     let inner = to_plain(&html[after_open..end]);
     let trimmed = inner.trim().to_string();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 pub fn get_chapter_html_with_cache(
@@ -298,7 +312,9 @@ pub fn get_chapter_html_with_cache(
     let total = doc.get_num_chapters();
 
     if chapter_idx >= total {
-        return Err(Error::NotFound(format!("chapter {chapter_idx} (book has {total})")));
+        return Err(Error::NotFound(format!(
+            "chapter {chapter_idx} (book has {total})"
+        )));
     }
 
     doc.set_current_chapter(chapter_idx);
@@ -324,7 +340,11 @@ pub fn get_chapter_html_with_cache(
                 .unwrap_or_else(|| format!("Section {}", chapter_idx + 1))
         });
 
-    Ok(ChapterContent { index: chapter_idx, title, html })
+    Ok(ChapterContent {
+        index: chapter_idx,
+        title,
+        html,
+    })
 }
 
 pub fn ensure_extracted(epub_path: &Path, cache_root: &Path) -> Result<PathBuf> {
@@ -386,7 +406,11 @@ pub fn search(path: &Path, query: &str) -> Result<Vec<SearchResult>> {
     Ok(results)
 }
 
-pub fn resolve_internal_link(path: &Path, current_chapter_idx: usize, href: &str) -> Result<Option<LinkTarget>> {
+pub fn resolve_internal_link(
+    path: &Path,
+    current_chapter_idx: usize,
+    href: &str,
+) -> Result<Option<LinkTarget>> {
     let trimmed = href.trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -432,7 +456,11 @@ pub fn resolve_internal_link(path: &Path, current_chapter_idx: usize, href: &str
     let chapter_idx = doc
         .resource_uri_to_chapter(&resolved_buf)
         .or_else(|| doc.resource_uri_to_chapter(&raw_buf))
-        .or_else(|| stripped_buf.as_ref().and_then(|p| doc.resource_uri_to_chapter(p)));
+        .or_else(|| {
+            stripped_buf
+                .as_ref()
+                .and_then(|p| doc.resource_uri_to_chapter(p))
+        });
 
     Ok(chapter_idx.map(|idx| LinkTarget {
         chapter_idx: idx.min(total.saturating_sub(1)),
@@ -447,11 +475,18 @@ pub fn get_resource(path: &Path, resource_path: &str) -> Option<(Vec<u8>, String
     doc.get_resource_by_path(std::path::Path::new(&clean))
         .map(|data| {
             let mime = detect_mime(&data).to_string();
-            log::debug!("Resource found: {} ({} bytes, type: {})", clean, data.len(), mime);
+            log::debug!(
+                "Resource found: {} ({} bytes, type: {})",
+                clean,
+                data.len(),
+                mime
+            );
             (data, mime)
         })
 }
 
+/// Prevents the linker from stripping symbols that are called via Tauri's dynamic
+/// command dispatch, which the compiler can't see as reachable.
 #[allow(dead_code)]
 pub fn _keep_functions_referenced() {
     let _ = get_resource;
@@ -484,11 +519,7 @@ fn rewrite_img_srcs(html: String, chapter_path: &Path, extracted_root: &Path) ->
         out = temp_out;
     }
 
-    if total_count > 0 {
-        log::info!("Rewrote {} image tags in chapter", total_count);
-    } else {
-        log::warn!("No image tags found in chapter HTML");
-    }
+    log::debug!("Rewrote {} image tags in chapter", total_count);
     out
 }
 
@@ -532,7 +563,9 @@ fn rewrite_src_attr(tag: &str, chapter_path: &Path, extracted_root: &Path) -> St
 }
 
 fn file_url(path: &Path) -> Option<String> {
-    let abs = fs::canonicalize(path).ok().unwrap_or_else(|| path.to_path_buf());
+    let abs = fs::canonicalize(path)
+        .ok()
+        .unwrap_or_else(|| path.to_path_buf());
     url::Url::from_file_path(&abs).ok().map(|u| u.to_string())
 }
 
@@ -544,8 +577,8 @@ fn cache_dir_for_book(epub_path: &Path, cache_root: &Path) -> PathBuf {
 }
 
 fn source_fingerprint(epub_path: &Path) -> Result<String> {
-    // Fingerprint combines path + size + mtime. If any changes, cache is invalidated.
-    // (Hash of path prevents collisions across multiple books in same cache root.)
+    // Path is included alongside size+mtime to prevent hash collisions when multiple books
+    // share the same cache root.
     let meta = fs::metadata(epub_path)?;
     let modified = meta
         .modified()
@@ -553,13 +586,18 @@ fn source_fingerprint(epub_path: &Path) -> Result<String> {
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    Ok(format!("{}:{}:{}", epub_path.display(), meta.len(), modified))
+    Ok(format!(
+        "{}:{}:{}",
+        epub_path.display(),
+        meta.len(),
+        modified
+    ))
 }
 
 fn extract_epub(epub_path: &Path, out_dir: &Path) -> Result<()> {
     let file = File::open(epub_path)?;
-    let mut zip = ZipArchive::new(file)
-        .map_err(|e| Error::Epub(format!("{}: {e}", epub_path.display())))?;
+    let mut zip =
+        ZipArchive::new(file).map_err(|e| Error::Epub(format!("{}: {e}", epub_path.display())))?;
 
     for i in 0..zip.len() {
         let mut entry = zip
@@ -589,7 +627,7 @@ fn extract_epub(epub_path: &Path, out_dir: &Path) -> Result<()> {
 }
 
 fn resolve_resource_path(chapter_path: &Path, src: &str) -> String {
-    // Strip query/anchor (zip keys don't include them).
+    // Strip query/anchor — zip entry keys don't include them.
     let src = src.split(['?', '#']).next().unwrap_or(src);
     if src.trim().is_empty() {
         return String::new();
@@ -652,7 +690,7 @@ fn detect_mime(data: &[u8]) -> &'static str {
         }
     }
 
-    // Default to JPEG for unknown binary formats (EPUB covers rarely seen types).
+    // Default to JPEG for unknown binary formats (EPUB covers rarely use exotic types).
     "image/jpeg"
 }
 
@@ -687,7 +725,10 @@ fn decode_fragment(fragment: &str) -> String {
 }
 
 fn stem(path: &Path) -> String {
-    path.file_stem().unwrap_or_default().to_string_lossy().into_owned()
+    path.file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn to_plain(html: &str) -> String {
@@ -721,7 +762,7 @@ fn strip_chrome(html: &str) -> String {
         let start = html[bs..].find('>').map(|p| bs + p + 1).unwrap_or(bs);
         return html[start..be].to_owned();
     }
-    html.to_owned()
+    html.to_owned() // No <body> found (e.g. HTML fragments) — return as-is rather than producing empty output.
 }
 
 fn safe_prefix(s: &str, max_bytes: usize) -> &str {
@@ -751,19 +792,23 @@ fn resize_cover(data: &[u8]) -> Option<Vec<u8>> {
     Some(out.into_inner())
 }
 
-fn get_fallback_cover(doc: &mut epub::doc::EpubDoc<std::io::BufReader<std::fs::File>>) -> Option<(Vec<u8>, String)> {
+fn get_fallback_cover(
+    doc: &mut epub::doc::EpubDoc<std::io::BufReader<std::fs::File>>,
+) -> Option<(Vec<u8>, String)> {
     let mut target_id = None;
 
     // 1. "cover-image" property
     if target_id.is_none() {
         if let Some((id, _)) = doc.resources.iter().find(|(_, res)| {
-            res.properties.as_ref().map_or(false, |p| p.split_ascii_whitespace().any(|s| s == "cover-image"))
+            res.properties.as_ref().map_or(false, |p| {
+                p.split_ascii_whitespace().any(|s| s == "cover-image")
+            })
         }) {
             target_id = Some(id.clone());
         }
     }
 
-    // 2. Try mdata("cover") for EPUB3 files where get_cover might not look for it but mdata has it
+    // 2. EPUB3 files sometimes declare the cover via metadata rather than manifest properties.
     if target_id.is_none() {
         if let Some(item) = doc.mdata("cover") {
             if doc.resources.contains_key(&item.value) {
@@ -775,7 +820,9 @@ fn get_fallback_cover(doc: &mut epub::doc::EpubDoc<std::io::BufReader<std::fs::F
     // 3. ID or path containing "cover"
     if target_id.is_none() {
         if let Some((id, _)) = doc.resources.iter().find(|(id, res)| {
-            if !res.mime.starts_with("image/") { return false; }
+            if !res.mime.starts_with("image/") {
+                return false;
+            }
             let p = res.path.to_string_lossy().to_lowercase();
             let i = id.to_lowercase();
             p.contains("cover") || i.contains("cover")
@@ -786,7 +833,9 @@ fn get_fallback_cover(doc: &mut epub::doc::EpubDoc<std::io::BufReader<std::fs::F
 
     // 4. First image in manifest
     if target_id.is_none() {
-        let mut images: Vec<_> = doc.resources.iter()
+        let mut images: Vec<_> = doc
+            .resources
+            .iter()
             .filter(|(_, res)| res.mime.starts_with("image/"))
             .collect();
         images.sort_by_key(|(_, res)| res.path.to_string_lossy().into_owned());

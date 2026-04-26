@@ -34,11 +34,11 @@ let _edgePageIntentCount = 0;
 let _edgePageIntentAt = 0;
 let _readerActive = false;
 let _skipExternalLinkConfirmForSession = false;
+let _scrollRaf = 0;
 
 /** @type {Map<string, import('./api.js').ChapterContent>} */
 const _chapterCache = new Map();
 const CHAPTER_CACHE_MAX = 50;
-
 
 const AUTO_PAGE_THRESHOLD_PX = 56;
 const AUTO_PAGE_COOLDOWN_MS = 420;
@@ -72,37 +72,38 @@ export function init() {
     scheduleProgressSave
   });
 
-  // Debounce writes so frequent scroll events do not flood persistence.
   const readingArea = document.getElementById("reading-area");
   readingArea.addEventListener("click", onReadingAreaClick, true);
   readingArea.addEventListener("scroll", () => {
-    const now = Date.now();
-    const autoPageSuspended = now < _suspendAutoPageUntil;
-    const currentTop = readingArea.scrollTop;
-    const direction = autoPageSuspended
-      ? 0
-      : (currentTop > _lastScrollTop ? 1 : (currentTop < _lastScrollTop ? -1 : 0));
-    _lastScrollTop = currentTop;
+    if (_scrollRaf) return;
+    _scrollRaf = requestAnimationFrame(() => {
+      _scrollRaf = 0;
+      const now = Date.now();
+      const autoPageSuspended = now < _suspendAutoPageUntil;
+      const currentTop = readingArea.scrollTop;
+      const direction = autoPageSuspended
+        ? 0
+        : (currentTop > _lastScrollTop ? 1 : (currentTop < _lastScrollTop ? -1 : 0));
+      _lastScrollTop = currentTop;
 
-    // Require real user movement so restore/layout scrolls do not flip chapters.
-    if (!autoPageSuspended && direction !== 0) {
-      maybeAutoPage(readingArea, direction);
-    }
+      if (!autoPageSuspended && direction !== 0) {
+        maybeAutoPage(readingArea, direction);
+      }
 
-    // Skip writes during restore so we do not overwrite a valid saved position.
-    if (autoPageSuspended) return;
+      // Skip writes during restore so we do not overwrite a valid saved position.
+      if (autoPageSuspended) return;
 
-    clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
+      clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
+    });
   });
 
-  // Track wheel velocity to enable chapter flips for short chapters that don't scroll
   readingArea.addEventListener("wheel", (e) => {
     const now = Date.now();
     if (e.deltaY > 0) _lastWheelDownAt = now;
     if (e.deltaY < 0) _lastWheelUpAt = now;
 
-    // Defer chapter flips until content restore settles to prevent accidental navigation
+    // Defer chapter flips until content restore settles to prevent accidental navigation.
     if (now < _suspendAutoPageUntil) return;
     maybeAutoPageFromWheel(readingArea, e.deltaY);
   }, { passive: true });
@@ -157,7 +158,6 @@ export function setActive(isActive) {
 export async function openBook(b) {
   timer.setBook(null);
 
-  // Fresh book = fresh chapter cache.
   _chapterCache.clear();
 
   book = b;
@@ -165,25 +165,22 @@ export async function openBook(b) {
   let restoreScrollPct = 0;
   let restoreLocator = readResumeLocator(book.id);
 
-  // Synchronous initial values
   if (restoreLocator && Number.isFinite(restoreLocator.chapterIdx)) {
     chapterIdx = clampChapterIndex(restoreLocator.chapterIdx);
     if (Number.isFinite(restoreLocator.scrollPct)) {
       restoreScrollPct = clamp(restoreLocator.scrollPct, 0, 1);
     }
   } else {
-    // If no locator, use initial book progress passed in list 
-    // it will be updated when getProgress completes if necessary, but this gives instant first render
+    // Fall back to book.progress_chapter for the initial render; the parallel
+    // getProgress fetch may update this before the user notices.
   }
 
-  // Render chapter immediately!
   let chapterRenderPromise = loadChapter(chapterIdx, {
     scrollTarget: "restore",
     restoreScrollPct,
     restoreLocator,
-  }).catch(() => {});
+  }).catch(() => { });
 
-  // Fetch the rest in parallel
   const [tocResult, progResult, annResult] = await Promise.allSettled([
     api.getToc(b.file_path),
     api.getProgress(b.id),
@@ -204,10 +201,10 @@ export async function openBook(b) {
 
   if (progResult.status === 'fulfilled' && progResult.value) {
     const prog = progResult.value;
-    // Only apply DB progress if we didn't have a valid resume locator 
+    // Only apply DB progress if we didn't have a valid resume locator.
     if (!restoreLocator || !Number.isFinite(restoreLocator.chapterIdx)) {
-        finalChapterIdx = prog.chapter_idx;
-        finalRestoreScrollPct = clamp(prog.scroll_pct ?? 0, 0, 1);
+      finalChapterIdx = prog.chapter_idx;
+      finalRestoreScrollPct = clamp(prog.scroll_pct ?? 0, 0, 1);
     }
   }
 
@@ -220,11 +217,11 @@ export async function openBook(b) {
   // If the chapter index changed because of the parallel progress fetch, we load again.
   // This is rare since we use book.progress_chapter or resumeLocator initially.
   if (chapterIdx !== finalChapterIdx) {
-      await loadChapter(chapterIdx, {
-        scrollTarget: "restore",
-        restoreScrollPct: finalRestoreScrollPct,
-        restoreLocator,
-      });
+    await loadChapter(chapterIdx, {
+      scrollTarget: "restore",
+      restoreScrollPct: finalRestoreScrollPct,
+      restoreLocator,
+    });
   }
 
   timer.setBook(book);
@@ -256,7 +253,7 @@ export async function loadChapter(idx, opts = {}) {
     let ch = _chapterCache.get(cacheKey);
     if (!ch) {
       ch = await api.getChapter(book.file_path, idx);
-      // LRU eviction: delete oldest entry when cache is full.
+      // Map preserves insertion order, so .keys().next() is always the oldest.
       if (_chapterCache.size >= CHAPTER_CACHE_MAX) {
         const oldest = _chapterCache.keys().next().value;
         _chapterCache.delete(oldest);
@@ -316,10 +313,6 @@ function renderChapter(
   scheduleHighlightSave(highlightQuote, highlightQuery);
 }
 
-
-
-
-
 function queueAnchorScroll(anchor) {
   const normalized = normalizeAnchorTarget(anchor);
   if (!normalized) return;
@@ -376,7 +369,6 @@ function scheduleProgressSave() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(persistProgress, PROGRESS_SAVE_DEBOUNCE_MS);
 }
-
 
 async function convertLocalImageUrls() {
   const elements = [...document.querySelectorAll(".chapter-body img, .chapter-body image")];
@@ -439,7 +431,6 @@ async function maybeAutoPage(readingArea, direction) {
   const hasRecentUpWheel = (now - _lastWheelUpAt) <= AUTO_PAGE_WHEEL_INTENT_MS;
 
   if (direction > 0 && nearBottom && hasRecentDownWheel && chapterIdx < chapterTotal - 1) {
-    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
     if (!consumeEdgePageIntent(1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
@@ -453,7 +444,6 @@ async function maybeAutoPage(readingArea, direction) {
   }
 
   if (direction < 0 && nearTop && hasRecentUpWheel && chapterIdx > 0) {
-    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
     if (!consumeEdgePageIntent(-1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
@@ -482,7 +472,6 @@ async function maybeAutoPageFromWheel(readingArea, deltaY) {
   const noScrollableOverflow = readingArea.scrollHeight <= (readingArea.clientHeight + 1);
 
   if (deltaY > 0 && (nearBottom || noScrollableOverflow) && chapterIdx < chapterTotal - 1) {
-    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
     if (!consumeEdgePageIntent(1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
@@ -496,7 +485,6 @@ async function maybeAutoPageFromWheel(readingArea, deltaY) {
   }
 
   if (deltaY < 0 && (nearTop || noScrollableOverflow) && chapterIdx > 0) {
-    // Require multiple deliberate interactions at edge to prevent accidental chapter flips from momentum
     if (!consumeEdgePageIntent(-1)) return;
     _autoPaging = true;
     _lastAutoPageAt = now;
@@ -515,6 +503,12 @@ async function maybeAutoPageFromWheel(readingArea, deltaY) {
   }
 }
 
+/**
+ * Guards against momentum-driven chapter flips by requiring two deliberate
+ * edge-hits within EDGE_PAGE_INTENT_WINDOW_MS before allowing a chapter turn.
+ * @param {number} direction  +1 or -1
+ * @returns {boolean}
+ */
 function consumeEdgePageIntent(direction) {
   const now = Date.now();
   const sameDirection = _edgePageIntentDir === direction;
@@ -559,7 +553,8 @@ async function persistProgress() {
   const maxScroll = Math.max(1, ra.scrollHeight - ra.clientHeight);
   const pct = maxScroll > 0 ? ra.scrollTop / maxScroll : 0;
 
-  // Save both percentage and structural locator to survive chapter reflows.
+  // Structural locator survives chapter reflows; scroll % is the fast fallback
+  // when the locator can't find its target.
   const locator = buildResumeLocator(ra, chapter, pct);
   if (locator) {
     writeResumeLocator(bookId, locator);
@@ -583,17 +578,10 @@ export async function flushProgress() {
   await timer.flush();
 }
 
-
-
-
-// --- Search bridge ---
-
 export function openSearch() {
   if (!book) return;
   search.open(book.file_path, toc);
 }
-
-// --- Utilities ---
 
 function clampChapterIndex(idx) {
   const n = Number.isFinite(idx) ? Math.trunc(idx) : 0;
@@ -701,4 +689,3 @@ function scheduleHighlightSave(highlightQuote, highlightQuery) {
     }
   });
 }
-

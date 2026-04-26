@@ -1,6 +1,7 @@
 /** Manages library state, rendering, import, deletion, and sort behavior. */
 import * as api from "./api.js";
 import * as bookinfo from "./bookinfo.js";
+import * as coverCache from "./cover-cache.js";
 import { esc, emptyState, fallbackCover, toast, LIBRARY_SEARCH_DEBOUNCE_MS } from "./ui.js";
 
 const DELETE_DIALOG_CLOSE_DELAY_MS = 120;
@@ -15,6 +16,7 @@ let selectionMode = false;
 let selectedBookIds = new Set();
 let selectionAnchorId = null;
 let lastShiftSelectedIds = new Set();
+let _lastFiltered = [];
 
 const SORT_OPTIONS = [
   {
@@ -73,6 +75,9 @@ export function init({ onOpen }) {
       _searchDebounce = setTimeout(() => requestAnimationFrame(render), LIBRARY_SEARCH_DEBOUNCE_MS);
     });
   }
+
+  const grid = document.getElementById("book-grid");
+  if (grid) grid.addEventListener("click", handleGridClick);
 
   const libView = document.getElementById("view-library");
   let dragDepth = 0;
@@ -200,6 +205,7 @@ export function render() {
   syncSortDropdown();
 
   const filteredBooks = getFilteredAndSortedBooks();
+  _lastFiltered = filteredBooks;
 
   const title = document.querySelector(".library-title");
   
@@ -224,14 +230,39 @@ export function render() {
     return;
   }
 
-  grid.innerHTML = filteredBooks.map((b) => buildBookCard(b)).join("");
+  // --- DOM recycling: reuse existing cards instead of full innerHTML nuke ---
+  const desiredIds = new Set(filteredBooks.map(b => b.id));
 
-  grid.querySelectorAll(".book-card").forEach((card) => {
-    const bookId = card.dataset.bookId;
-    const book = books.find(b => b.id === bookId);
-    if (!book) return;
-    attachBookCardHandlers(card, book, filteredBooks);
-  });
+  const existingCards = new Map();
+  for (const card of grid.querySelectorAll(".book-card")) {
+    const id = card.dataset.bookId;
+    if (id && desiredIds.has(id)) {
+      existingCards.set(id, card);
+    } else {
+      card.remove();
+    }
+  }
+
+  // Clear stale non-card children (e.g. old empty-state)
+  for (const child of [...grid.children]) {
+    if (!child.classList?.contains("book-card")) child.remove();
+  }
+
+  let prevNode = null;
+  for (const b of filteredBooks) {
+    let card = existingCards.get(b.id);
+    if (card) {
+      patchBookCard(card, b);
+    } else {
+      card = createBookCardElement(b);
+    }
+    if (prevNode) {
+      if (card.previousElementSibling !== prevNode) prevNode.after(card);
+    } else if (card !== grid.firstElementChild) {
+      grid.prepend(card);
+    }
+    prevNode = card;
+  }
 }
 
 function applySort(booksArray) {
@@ -240,16 +271,17 @@ function applySort(booksArray) {
 }
 
 /** Returns HTML string for a single book card. */
-function buildBookCard(b) {
+function buildBookCardHtml(b) {
   const isSelected = selectedBookIds.has(b.id);
+  const coverUrl = coverCache.getCoverUrl(b.id, b.cover_b64);
   return `
     <div class="book-card ${isSelected ? 'selected' : ''}" data-book-id="${esc(b.id)}">
       <div class="book-cover">
         <div class="selection-checkbox" aria-hidden="true">
           ${isSelected ? `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7.5 6 10.5 11 3"></polyline></svg>` : ''}
         </div>
-        ${b.cover_b64
-          ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy" decoding="async" draggable="false" />`
+        ${coverUrl
+          ? `<img src="${coverUrl}" alt="${esc(b.title)}" loading="lazy" decoding="async" draggable="false" />`
           : fallbackCover(b.title)}
         <div class="book-cover-overlay">
           <button class="overlay-btn play-btn" title="Open book" aria-label="Open book">
@@ -280,74 +312,88 @@ function buildBookCard(b) {
     </div>`;
 }
 
-/** Attaches click handlers to a rendered book card. */
-function attachBookCardHandlers(card, book, filteredBooks) {
-  const playBtn = card.querySelector(".play-btn");
-  const infoBtn = card.querySelector(".info-btn");
+/** Parse card HTML into a DOM element. */
+function createBookCardElement(b) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = buildBookCardHtml(b).trim();
+  return tpl.content.firstChild;
+}
 
-  card.addEventListener("click", (e) => {
-    if (selectionMode) {
-      e.preventDefault();
-      
-      if (e.shiftKey && selectionAnchorId) {
-        const anchorIdx = filteredBooks.findIndex(b => b.id === selectionAnchorId);
-        const currIdx = filteredBooks.findIndex(b => b.id === book.id);
-        
-        if (anchorIdx !== -1 && currIdx !== -1) {
-          for (const id of lastShiftSelectedIds) {
-            if (id !== selectionAnchorId) {
-              selectedBookIds.delete(id);
-            }
-          }
-          lastShiftSelectedIds.clear();
-          
-          const start = Math.min(anchorIdx, currIdx);
-          const end = Math.max(anchorIdx, currIdx);
-          
-          for (let i = start; i <= end; i++) {
-            const id = filteredBooks[i].id;
-            selectedBookIds.add(id);
-            if (id !== selectionAnchorId) {
-              lastShiftSelectedIds.add(id);
-            }
-          }
-          render();
-          return;
-        }
-      }
-
-      if (selectedBookIds.has(book.id)) {
-        selectedBookIds.delete(book.id);
-      } else {
-        selectedBookIds.add(book.id);
-      }
-      selectionAnchorId = book.id;
-      lastShiftSelectedIds.clear();
-      render();
-      return;
+/** Patch an existing card in-place (selection state + progress). */
+function patchBookCard(card, b) {
+  const isSelected = selectedBookIds.has(b.id);
+  const wasSelected = card.classList.contains("selected");
+  if (isSelected !== wasSelected) {
+    card.classList.toggle("selected", isSelected);
+    const checkbox = card.querySelector(".selection-checkbox");
+    if (checkbox) {
+      checkbox.innerHTML = isSelected
+        ? `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7.5 6 10.5 11 3"></polyline></svg>`
+        : "";
     }
-    if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
-      onOpenBook(book);
-    }
-  });
+  }
+  const fill = card.querySelector(".progress-fill");
+  if (fill) fill.style.width = `${b.progress_pct}%`;
+  const label = card.querySelector(".progress-label");
+  if (label) label.textContent = progressLabel(b);
+}
 
-  playBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
+/** Delegated click handler for the book grid (set once in init). */
+function handleGridClick(e) {
+  const card = e.target.closest(".book-card");
+  if (!card) return;
+  const bookId = card.dataset.bookId;
+  const book = books.find(b => b.id === bookId);
+  if (!book) return;
+
+  if (e.target.closest(".delete-btn")) {
+    (async () => {
+      if (await confirmDeleteBook()) deleteBookItem(book.id);
+    })();
+    return;
+  }
+  if (e.target.closest(".play-btn")) {
     onOpenBook(book);
-  });
-
-  infoBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
+    return;
+  }
+  if (e.target.closest(".info-btn")) {
     showBookInfo(book);
-  });
+    return;
+  }
 
-  const deleteBtn = card.querySelector(".delete-btn");
-  deleteBtn.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    if (await confirmDeleteBook()) {
-      deleteBookItem(book.id);
+  if (selectionMode) {
+    e.preventDefault();
+    if (e.shiftKey && selectionAnchorId) {
+      const anchorIdx = _lastFiltered.findIndex(b => b.id === selectionAnchorId);
+      const currIdx = _lastFiltered.findIndex(b => b.id === book.id);
+      if (anchorIdx !== -1 && currIdx !== -1) {
+        for (const id of lastShiftSelectedIds) {
+          if (id !== selectionAnchorId) selectedBookIds.delete(id);
+        }
+        lastShiftSelectedIds.clear();
+        const start = Math.min(anchorIdx, currIdx);
+        const end = Math.max(anchorIdx, currIdx);
+        for (let i = start; i <= end; i++) {
+          const id = _lastFiltered[i].id;
+          selectedBookIds.add(id);
+          if (id !== selectionAnchorId) lastShiftSelectedIds.add(id);
+        }
+        render();
+        return;
+      }
     }
-  });
+    if (selectedBookIds.has(book.id)) {
+      selectedBookIds.delete(book.id);
+    } else {
+      selectedBookIds.add(book.id);
+    }
+    selectionAnchorId = book.id;
+    lastShiftSelectedIds.clear();
+    render();
+    return;
+  }
+
+  onOpenBook(book);
 }
 
 /** Returns filtered and sorted books ready for rendering. */
@@ -549,6 +595,7 @@ async function handleBulkDelete() {
     try {
       const ids = Array.from(selectedBookIds);
       await api.deleteBooks(ids);
+      for (const id of ids) coverCache.invalidate(id);
       books = books.filter(b => !selectedBookIds.has(b.id));
       render();
       toast(`${ids.length} books deleted`);
@@ -649,6 +696,7 @@ async function deleteBookItem(bookId) {
   try {
     const book = books.find((b) => b.id === bookId);
     await api.deleteBooks([bookId]);
+    coverCache.invalidate(bookId);
     books = books.filter((b) => b.id !== bookId);
     render();
     toast(`"${book.title}" deleted`);

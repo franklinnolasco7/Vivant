@@ -1,6 +1,7 @@
 /** Book info panel: slides in from right and displays rich book details. */
 
 import { esc, fallbackCover, toast } from "./ui.js";
+import * as coverCache from "./cover-cache.js";
 import * as format from "./format.js";
 import * as api from "./api.js";
 
@@ -182,8 +183,9 @@ function switchTab(tab) {
 
 function renderHero(book) {
   const cover = panel.querySelector("#bookinfo-cover");
-  cover.innerHTML = book.cover_b64
-    ? `<img src="${book.cover_b64}" alt="${esc(book.title || "Book cover")}" decoding="sync" />`
+  const coverUrl = coverCache.getCoverUrl(book.id, book.cover_b64);
+  cover.innerHTML = coverUrl
+    ? `<img src="${coverUrl}" alt="${esc(book.title || "Book cover")}" decoding="sync" />`
     : fallbackCover(book.title || "Untitled");
 
   panel.querySelector("#bookinfo-title").textContent = book.title || "Untitled";
