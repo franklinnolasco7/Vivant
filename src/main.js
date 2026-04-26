@@ -303,6 +303,13 @@ function wireGlobalEvents() {
       }
       return;
     }
+    if (!inInput && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      if (currentView === "library" && lib.isSelectionMode()) {
+        e.preventDefault();
+        lib.selectAllBooks();
+        return;
+      }
+    }
     if (!inInput && e.key === "ArrowRight") reader.loadChapter && document.getElementById("btn-next").click();
     if (!inInput && e.key === "ArrowLeft")  reader.loadChapter && document.getElementById("btn-prev").click();
   });

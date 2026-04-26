@@ -585,6 +585,14 @@ export function cancelSelectionMode() {
   setSelectionMode(false);
 }
 
+export function selectAllBooks() {
+  if (!selectionMode) return;
+  for (const b of _lastFiltered) {
+    selectedBookIds.add(b.id);
+  }
+  render();
+}
+
 function toggleSelectionMode() {
   setSelectionMode(!selectionMode);
 }
