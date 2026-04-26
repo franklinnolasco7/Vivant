@@ -32,10 +32,10 @@ export const getLibrary = () => call("get_library");
 export const importEpub = (path) => call("import_epub", { path });
 
 /**
- * Delete a book from the library.
- * @param {string} bookId
+ * Delete multiple books from the library.
+ * @param {string[]} bookIds
  */
-export const deleteBook = (bookId) => call("delete_book", { bookId });
+export const deleteBooks = (bookIds) => call("delete_books", { bookIds });
 
 /**
  * Update book metadata.
@@ -123,7 +123,7 @@ export const searchBook = (filePath, query) =>
 
 export const windowMinimize = () => call("window_minimize");
 export const windowMaximize = () => call("window_maximize");
-export const windowClose    = () => call("window_close");
+export const windowClose = () => call("window_close");
 
 // --- JSDoc types for editor IntelliSense ---
 

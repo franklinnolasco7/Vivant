@@ -84,12 +84,11 @@ pub async fn get_library(pool: State<'_, DbPool>) -> CommandResult<Vec<library::
 }
 
 #[tauri::command]
-#[allow(dead_code)]
-pub async fn delete_book(
+pub async fn delete_books(
     pool: State<'_, DbPool>,
-    book_id: String,
+    book_ids: Vec<String>,
 ) -> CommandResult<()> {
-    into_command_result(library::delete_book(&pool, &book_id))
+    into_command_result(library::delete_books(&pool, &book_ids))
 }
 
 #[derive(Deserialize)]

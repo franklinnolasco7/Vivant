@@ -11,6 +11,9 @@ let books = [];
 let searchQuery = "";
 let onOpenBook = (_book) => {};
 
+let selectionMode = false;
+let selectedBookIds = new Set();
+
 const SORT_OPTIONS = [
   {
     label: "Recent",
@@ -48,7 +51,16 @@ export function init({ onOpen }) {
   initSortDropdown();
 
   const importBtn = document.getElementById("btn-import");
-  importBtn.addEventListener("click", openFilePicker);
+  if (importBtn) importBtn.addEventListener("click", openFilePicker);
+
+  const selectBtn = document.getElementById("btn-select");
+  if (selectBtn) selectBtn.addEventListener("click", toggleSelectionMode);
+
+  const selCancelBtn = document.getElementById("btn-selection-cancel");
+  if (selCancelBtn) selCancelBtn.addEventListener("click", () => setSelectionMode(false));
+
+  const selDeleteBtn = document.getElementById("btn-selection-delete");
+  if (selDeleteBtn) selDeleteBtn.addEventListener("click", handleBulkDelete);
 
   let _searchDebounce = null;
   const searchInput = document.getElementById("lib-search-input");
@@ -187,8 +199,23 @@ export function render() {
 
   const filteredBooks = getFilteredAndSortedBooks();
 
-  const inprog = filteredBooks.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
-  meta.textContent = `${filteredBooks.length} book${filteredBooks.length !== 1 ? "s" : ""} · ${inprog} in progress`;
+  const title = document.querySelector(".library-title");
+  
+  if (selectionMode) {
+    title.textContent = `${selectedBookIds.size} selected`;
+    meta.style.display = "none";
+    const selDeleteBtn = document.getElementById("btn-selection-delete");
+    if (selDeleteBtn) {
+      const hasSelection = selectedBookIds.size > 0;
+      selDeleteBtn.disabled = !hasSelection;
+      selDeleteBtn.classList.toggle("active", hasSelection);
+    }
+  } else {
+    title.textContent = "Your Library";
+    meta.style.display = "block";
+    const inprog = filteredBooks.filter((b) => b.progress_pct > 0 && b.progress_pct < 100).length;
+    meta.textContent = `${filteredBooks.length} book${filteredBooks.length !== 1 ? "s" : ""} · ${inprog} in progress`;
+  }
 
   if (!filteredBooks.length) {
     grid.innerHTML = emptyState("book", "No books yet", searchQuery ? "No books match your search" : "Import an EPUB to get started");
@@ -212,11 +239,15 @@ function applySort(booksArray) {
 
 /** Returns HTML string for a single book card. */
 function buildBookCard(b) {
+  const isSelected = selectedBookIds.has(b.id);
   return `
-    <div class="book-card" data-book-id="${esc(b.id)}">
+    <div class="book-card ${isSelected ? 'selected' : ''}" data-book-id="${esc(b.id)}">
       <div class="book-cover">
+        <div class="selection-checkbox" aria-hidden="true">
+          ${isSelected ? `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7.5 6 10.5 11 3"></polyline></svg>` : ''}
+        </div>
         ${b.cover_b64
-          ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy" decoding="async" />`
+          ? `<img src="${b.cover_b64}" alt="${esc(b.title)}" loading="lazy" decoding="async" draggable="false" />`
           : fallbackCover(b.title)}
         <div class="book-cover-overlay">
           <button class="overlay-btn play-btn" title="Open book" aria-label="Open book">
@@ -253,6 +284,16 @@ function attachBookCardHandlers(card, book) {
   const infoBtn = card.querySelector(".info-btn");
 
   card.addEventListener("click", (e) => {
+    if (selectionMode) {
+      e.preventDefault();
+      if (selectedBookIds.has(book.id)) {
+        selectedBookIds.delete(book.id);
+      } else {
+        selectedBookIds.add(book.id);
+      }
+      render();
+      return;
+    }
     if (!e.target.closest(".overlay-btn") && !e.target.closest(".delete-btn")) {
       onOpenBook(book);
     }
@@ -439,6 +480,98 @@ function showDeleteBookConfirm() {
   });
 }
 
+function setSelectionMode(enabled) {
+  selectionMode = enabled;
+  selectedBookIds.clear();
+  
+  const normalActions = document.getElementById("library-actions-normal");
+  const selActions = document.getElementById("library-actions-selection");
+  if (normalActions) normalActions.style.display = enabled ? "none" : "flex";
+  if (selActions) selActions.style.display = enabled ? "flex" : "none";
+  
+  const libView = document.getElementById("view-library");
+  if (libView) libView.classList.toggle("selection-mode", enabled);
+  render();
+}
+
+function toggleSelectionMode() {
+  setSelectionMode(!selectionMode);
+}
+
+async function handleBulkDelete() {
+  if (selectedBookIds.size === 0) return;
+  if (await showDeleteBooksConfirm(selectedBookIds.size)) {
+    try {
+      const ids = Array.from(selectedBookIds);
+      await api.deleteBooks(ids);
+      books = books.filter(b => !selectedBookIds.has(b.id));
+      render();
+      toast(`${ids.length} books deleted`);
+      setSelectionMode(false);
+    } catch (err) {
+      toast(`Delete failed: ${err.message}`);
+    }
+  }
+}
+
+function showDeleteBooksConfirm(count) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("delete-book-confirm");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "delete-book-confirm";
+    overlay.className = "external-link-confirm-backdrop";
+    overlay.innerHTML = `
+      <div class="external-link-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-book-confirm-title">
+        <div class="external-link-confirm-title" id="delete-book-confirm-title">Delete Books</div>
+        <div class="external-link-confirm-body">Delete ${count} selected books from your library?</div>
+        <div class="external-link-confirm-actions">
+          <button class="nav-btn" type="button" data-action="delete">Delete</button>
+          <button class="nav-btn" type="button" data-action="cancel">Cancel</button>
+        </div>
+      </div>`;
+
+    const close = (approved) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.classList.remove("open");
+      setTimeout(() => {
+        overlay.remove();
+        resolve(approved);
+      }, DELETE_DIALOG_CLOSE_DELAY_MS);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(false);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        close(true);
+      }
+    };
+
+    overlay.addEventListener("click", (event) => {
+      const action = event.target?.closest?.("[data-action]")?.getAttribute("data-action");
+      if (action === "delete") {
+        close(true);
+        return;
+      }
+      if (action === "cancel" || event.target === overlay) {
+        close(false);
+      }
+    });
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+    document.addEventListener("keydown", onKeyDown, true);
+
+    const deleteBtn = overlay.querySelector('[data-action="delete"]');
+    deleteBtn?.focus();
+  });
+}
+
 async function importPaths(paths) {
   const chunkSize = 20;
   for (let i = 0; i < paths.length; i += chunkSize) {
@@ -470,7 +603,7 @@ export function progressLabel(b) {
 async function deleteBookItem(bookId) {
   try {
     const book = books.find((b) => b.id === bookId);
-    await api.deleteBook(bookId);
+    await api.deleteBooks([bookId]);
     books = books.filter((b) => b.id !== bookId);
     render();
     toast(`"${book.title}" deleted`);

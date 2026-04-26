@@ -122,6 +122,8 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 250px;
   contain: content;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .book-card:hover {
   transform: translateY(-3px);
@@ -142,6 +144,7 @@
   transform: translateZ(0);
   backface-visibility: hidden;
   filter: brightness(0.82);
+  -webkit-user-drag: none;
 }
 .book-cover-fallback {
   position: absolute;
@@ -289,7 +292,8 @@
 }
 
 .theme-bw .delete-btn:hover {
-  background: var(--t0);
+  background: #b54040;
+  color: #fff;
 }
 
 .theme-bw .book-cover,
@@ -322,4 +326,49 @@
   filter: grayscale(1) contrast(0.95);
   mix-blend-mode: multiply;
   background: var(--b0);
+}
+
+#view-library.selection-mode .book-card {
+  transform: none;
+}
+#view-library.selection-mode .book-cover-overlay,
+#view-library.selection-mode .delete-btn {
+  display: none !important;
+}
+.selection-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--t2);
+  background: var(--b0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 3;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: all 0.2s;
+}
+#view-library.selection-mode .selection-checkbox {
+  display: flex;
+}
+.book-card.selected .selection-checkbox {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: var(--b0);
+}
+.book-card.selected .book-cover::after {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.2);
+}
+.book-card.selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+#btn-selection-delete.active {
+  color: #b54040;
 }

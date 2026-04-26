@@ -559,14 +559,20 @@ pub fn delete_annotation(pool: &DbPool, id: &str) -> Result<()> {
 }
 
 #[allow(dead_code)]
-pub fn delete_book(pool: &DbPool, id: &str) -> Result<()> {
-    let conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
-    let deleted = conn.execute("DELETE FROM books WHERE id = ?1", params![id])?;
-    if deleted == 0 {
-        return Err(Error::NotFound(format!("book {id}")));
+pub fn delete_books(pool: &DbPool, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
     }
-    let _ = conn.execute("DELETE FROM annotations WHERE book_id = ?1", params![id]);
-    let _ = conn.execute("DELETE FROM progress WHERE book_id = ?1", params![id]);
+    let mut conn = pool.get().map_err(|e| Error::Db(e.to_string()))?;
+    let tx = conn.transaction().map_err(|e| Error::Db(e.to_string()))?;
+
+    for id in ids {
+        tx.execute("DELETE FROM books WHERE id = ?1", params![id])?;
+        tx.execute("DELETE FROM annotations WHERE book_id = ?1", params![id])?;
+        tx.execute("DELETE FROM progress WHERE book_id = ?1", params![id])?;
+    }
+
+    tx.commit().map_err(|e| Error::Db(e.to_string()))?;
     Ok(())
 }
 

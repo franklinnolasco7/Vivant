@@ -93,7 +93,7 @@ document.getElementById("app").innerHTML = `
         <div class="library-title">Your Library</div>
         <div class="library-meta" id="library-meta">Loading…</div>
       </div>
-      <div class="library-actions">
+      <div class="library-actions" id="library-actions-normal">
         <div class="lib-search-container">
           <input
             class="lib-search-input"
@@ -127,7 +127,12 @@ document.getElementById("app").innerHTML = `
           </button>
           <div class="sort-menu" id="sort-menu" role="listbox" aria-label="Sort options"></div>
         </div>
+        <button class="nav-btn" id="btn-select" title="Select multiple books">Select</button>
         <button class="nav-btn" id="btn-import" title="Import EPUB files">+ Import</button>
+      </div>
+      <div class="library-actions" id="library-actions-selection" style="display: none;">
+        <button class="nav-btn" id="btn-selection-cancel">Cancel</button>
+        <button class="nav-btn" id="btn-selection-delete">Delete</button>
       </div>
     </div>
 
