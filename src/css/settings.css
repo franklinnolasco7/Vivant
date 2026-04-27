@@ -1,0 +1,222 @@
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 80;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.settings-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settings-panel {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  background: var(--b1);
+  border: 1px solid var(--br);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.97) translateY(6px);
+  transition: transform 0.2s ease;
+}
+.settings-backdrop.open .settings-panel {
+  transform: scale(1) translateY(0);
+}
+
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 0;
+  flex-shrink: 0;
+}
+.settings-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--t0);
+  line-height: 1.2;
+}
+.settings-sub {
+  font-size: 13px;
+  color: var(--t2);
+  margin-top: 4px;
+}
+
+.settings-close-btn {
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--ease);
+  flex-shrink: 0;
+  padding: 0;
+  margin-top: -4px;
+}
+.settings-close-btn svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+.settings-close-btn:hover {
+  background: var(--b2);
+  border-color: var(--br);
+  color: var(--t0);
+}
+
+/* Tab bar — matches library/reader switcher style */
+.settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  background: var(--b3);
+  margin: 14px 20px 0;
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--t2);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 400;
+  cursor: pointer;
+  transition: var(--ease);
+  white-space: nowrap;
+}
+.settings-tab svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.settings-tab:hover {
+  color: var(--t1);
+}
+.settings-tab.active {
+  background: var(--b1);
+  color: var(--t0);
+}
+
+/* Scrollable body */
+.settings-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 18px 20px 20px;
+}
+
+/* Section */
+.settings-section {
+  margin-bottom: 20px;
+}
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t0);
+  margin-bottom: 10px;
+}
+
+/* Theme option rows */
+.settings-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-theme-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--ease);
+  user-select: none;
+  background: var(--b2);
+}
+.settings-theme-row:hover {
+  background: var(--b3);
+}
+.settings-theme-row.active {
+  border-color: var(--br);
+  background: var(--b1);
+}
+
+.settings-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ac);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.settings-theme-row.active .settings-row-dot {
+  opacity: 1;
+}
+.settings-row-icon {
+  display: flex;
+  align-items: center;
+  color: var(--t2);
+  flex-shrink: 0;
+}
+.settings-row-icon svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+.settings-row-label {
+  font-size: 14px;
+  color: var(--t1);
+  flex: 1;
+}
+.settings-theme-row.active .settings-row-label {
+  color: var(--t0);
+}
+
+.settings-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 16px;
+  color: var(--t2);
+  font-size: 13px;
+  border: 1px solid var(--br);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 560px) {
+  .settings-panel {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 32px);
+  }
+  .settings-header,
+  .settings-tabs,
+  .settings-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .settings-tabs {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+}

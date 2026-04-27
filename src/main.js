@@ -6,6 +6,7 @@ import * as lib      from "./library.js";
 import * as reader   from "./reader.js";
 import * as search   from "./search.js";
 import * as bookinfo from "./bookinfo.js";
+import * as settings from "./settings.js";
 
 // --- Build HTML shell ---
 
@@ -17,13 +18,6 @@ document.getElementById("app").innerHTML = `
     <div class="tab" data-view="reader">Reading</div>
   </div>
   <div style="flex:1"></div>
-  <div class="theme-swatches">
-    <button class="swatch-btn" data-theme="dark" title="Dark">Dark</button>
-    <button class="swatch-btn" data-theme="sepia" title="Sepia">Sepia</button>
-    <button class="swatch-btn" data-theme="light" title="Light">Light</button>
-    <button class="swatch-btn" data-theme="bw" title="B&W">B&W</button>
-  </div>
-  <div class="sep"></div>
   <button class="icon-btn icon-btn-search" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="7" cy="7" r="4.5"/>
@@ -256,6 +250,7 @@ function updateReaderActivity() {
 // --- Initialize modules ---
 
 bookinfo.init();
+settings.init();
 
 lib.init({
   onOpen: async (book) => {
@@ -272,9 +267,6 @@ reader.init();
 wireGlobalEvents();
 
 function wireGlobalEvents() {
-  document.querySelectorAll(".swatch-btn").forEach((s) =>
-    s.addEventListener("click", () => ui.applyTheme(s.dataset.theme))
-  );
 
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => switchView(tab.dataset.view))

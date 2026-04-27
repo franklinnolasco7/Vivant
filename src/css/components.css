@@ -27,7 +27,7 @@
 .win-btn {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--br);
   background: transparent;
   color: var(--t2);
@@ -36,7 +36,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: var(--ease);
   padding: 0;
 }
 .win-btn:hover {
@@ -53,16 +53,16 @@
   display: flex;
   gap: 1px;
   background: var(--b3);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 2px;
 }
 .tab {
   padding: 4px 14px;
-  border-radius: 4px;
+  border-radius: calc(var(--radius-sm) - 2px);
   cursor: pointer;
   font-size: 13px;
   color: var(--t2);
-  transition: all 0.2s;
+  transition: var(--ease);
 }
 .tab.active {
   background: var(--b1);
@@ -74,29 +74,28 @@
 }
 
 .icon-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--t2);
-  font-size: 15px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: var(--ease);
+  padding: 0;
 }
 .icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 .icon-btn:hover {
   background: var(--b2);
   border-color: var(--br);
   color: var(--t0);
 }
-
 .icon-btn-search {
   padding: 0;
 }
@@ -105,34 +104,7 @@
   height: 17px;
 }
 
-.theme-swatches {
-  display: flex;
-  gap: 4px;
-  background: var(--b2);
-  border-radius: 6px;
-  padding: 4px;
-}
-.swatch-btn {
-  padding: 6px 12px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--t2);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-.swatch-btn:hover {
-  background: var(--b3);
-  color: var(--t0);
-}
-.swatch-btn.active {
-  background: var(--ac);
-  color: #fff;
-  border-color: var(--ac);
-}
+
 .sep {
   width: 1px;
   height: 20px;
@@ -176,7 +148,7 @@
   background: var(--ac);
   color: #fff;
   padding: 7px 18px;
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   z-index: 130;
   pointer-events: none;
@@ -198,54 +170,47 @@
   z-index: 70;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.2s ease;
 }
-
 .external-link-confirm-backdrop.open {
   opacity: 1;
   pointer-events: auto;
 }
-
 .external-link-confirm {
   width: min(520px, calc(100vw - 32px));
   background: var(--b1);
   border: 1px solid var(--br);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
   padding: 16px;
 }
-
 .external-link-confirm-title {
   font-size: 18px;
   color: var(--t0);
   font-weight: 520;
   margin-bottom: 10px;
 }
-
 .external-link-confirm-body {
   font-size: 16px;
   color: var(--t0);
   margin-bottom: 10px;
 }
-
 .external-link-confirm-url {
   font-size: 14px;
   color: var(--t1);
   word-break: break-word;
   background: var(--b2);
   border: 1px solid var(--br);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 9px 10px;
   width: 100%;
   font-family: inherit;
 }
-
 .external-link-confirm-url:focus {
   outline: none;
   border-color: var(--ac);
   box-shadow: 0 0 0 1px var(--ad);
 }
-
 .external-link-confirm-session-opt {
   margin-top: 10px;
   display: inline-flex;
@@ -257,7 +222,6 @@
   cursor: pointer;
   user-select: none;
 }
-
 .external-link-confirm-session-checkbox {
   appearance: none;
   width: 16px;
@@ -268,23 +232,17 @@
   position: relative;
   flex-shrink: 0;
   cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    box-shadow 0.16s ease;
+  transition: var(--ease);
 }
-
 .external-link-confirm-session-checkbox:focus-visible {
   outline: none;
   border-color: var(--ac);
   box-shadow: 0 0 0 1px var(--ad);
 }
-
 .external-link-confirm-session-checkbox:checked {
   border-color: var(--ac);
   background: var(--ac);
 }
-
 .external-link-confirm-session-checkbox:checked::after {
   content: "";
   position: absolute;
@@ -296,16 +254,13 @@
   border-width: 0 1.8px 1.8px 0;
   transform: rotate(45deg);
 }
-
 .external-link-confirm-session-opt:hover
   .external-link-confirm-session-checkbox:not(:checked) {
   border-color: var(--t1);
 }
-
 .external-link-confirm-session-text {
   color: var(--t1);
 }
-
 .external-link-confirm-actions {
   margin-top: 14px;
   display: flex;
@@ -313,6 +268,7 @@
   gap: 8px;
 }
 
+/* Add note dialog */
 .add-note-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -324,30 +280,26 @@
   z-index: 70;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.2s ease;
 }
-
 .add-note-dialog-backdrop.open {
   opacity: 1;
   pointer-events: auto;
 }
-
 .add-note-dialog {
   width: min(460px, calc(100vw - 32px));
   background: var(--b1);
   border: 1px solid var(--br);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
   padding: 16px;
 }
-
 .add-note-dialog-title {
   font-size: 17px;
   color: var(--t0);
   font-weight: 520;
   margin-bottom: 10px;
 }
-
 .add-note-dialog-input {
   width: 100%;
   min-height: 104px;
@@ -356,23 +308,20 @@
   background: var(--b2);
   color: var(--t0);
   border: 1px solid var(--br);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px;
   font-size: 14px;
   line-height: 1.4;
   font-family: inherit;
 }
-
 .add-note-dialog-input::placeholder {
   color: var(--t2);
 }
-
 .add-note-dialog-input:focus {
   outline: none;
   border-color: var(--ac);
   box-shadow: 0 0 0 1px var(--ad);
 }
-
 .add-note-dialog-actions {
   margin-top: 12px;
   display: flex;

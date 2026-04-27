@@ -39,8 +39,8 @@ export function init() {
               <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>
             </svg>
           </button>
-          <button class="bookinfo-btn bookinfo-btn-secondary" id="bookinfo-close-main" title="Close" aria-label="Close">
-            <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <button class="bookinfo-btn bookinfo-btn-icon" id="bookinfo-close-main" title="Close" aria-label="Close">
+            <svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
               <line x1="3" y1="3" x2="11" y2="11"></line>
               <line x1="11" y1="3" x2="3" y2="11"></line>
             </svg>

@@ -98,8 +98,8 @@
   font-size: 13px;
   color: var(--t1);
   border-left: 3px solid transparent;
-  border-radius: 0 6px 6px 0;
-  transition: all 0.2s;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition: var(--ease);
   line-height: 1.35;
 }
 .toc-item:hover {
@@ -256,7 +256,7 @@
 }
 .nav-btn {
   padding: 5px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--br);
   background: transparent;
   color: var(--t1);
@@ -266,7 +266,7 @@
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--ease);
   font-family: inherit;
 }
 .nav-btn:hover {
@@ -289,7 +289,7 @@
   min-width: 110px;
   background: var(--b1);
   border: 1px solid var(--br);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-soft);
   padding: 4px;
   display: none;
@@ -308,10 +308,10 @@
   font: inherit;
   font-size: 13px;
   text-align: left;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 9px;
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition: var(--ease);
 }
 
 .sort-option:hover {
@@ -362,7 +362,7 @@
   min-width: 168px;
   max-width: min(320px, calc(100vw - 16px));
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--br);
   background: color-mix(in srgb, var(--b1) 92%, var(--b3) 8%);
   color: var(--t0);

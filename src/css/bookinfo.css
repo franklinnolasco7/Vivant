@@ -42,7 +42,7 @@
 .bookinfo-cover {
   width: 86px;
   height: 128px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--b3);
   overflow: hidden;
   flex-shrink: 0;
@@ -102,15 +102,18 @@
   margin-top: 8px;
 }
 .bookinfo-btn {
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 0 14px;
+  height: var(--ctrl-h);
+  border-radius: var(--radius-md);
   border: 1px solid var(--br);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--ease);
   font-family: inherit;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .bookinfo-btn-primary {
   background: var(--ac);
@@ -130,14 +133,18 @@
   color: var(--t0);
 }
 
-.bookinfo-btn-secondary svg {
-  width: 12px;
-  height: 12px;
+.bookinfo-btn-secondary svg,
+.bookinfo-btn-icon svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 .bookinfo-btn-icon {
-  width: 34px;
-  min-width: 34px;
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  min-width: var(--ctrl-h);
   padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
   background: var(--b2);
   color: var(--t1);
   display: inline-flex;
@@ -193,7 +200,7 @@
   color: var(--t2);
   font-size: 13px;
   cursor: pointer;
-  transition: color 0.2s;
+  transition: var(--ease);
   border-bottom: 2px solid transparent;
   font-family: inherit;
 }
@@ -487,7 +494,7 @@
 .book-edit-dialog {
   margin: auto;
   border: 1px solid var(--br);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--b1);
   color: var(--t0);
   padding: 16px;
@@ -564,7 +571,7 @@
   background: var(--b2);
   color: var(--t0);
   border: 1px solid var(--br);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px;
   font-size: 14px;
   line-height: 1.4;

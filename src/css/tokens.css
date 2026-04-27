@@ -15,6 +15,18 @@
   --search-hit-mid: rgba(196, 135, 90, 0.3);
   --search-hit-low: rgba(196, 135, 90, 0.02);
   --shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.2);
+
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-pill: 999px;
+
+  --ctrl-h:     32px;
+  --icon-sm:    14px;
+  --icon-md:    16px;
+
+  --ease:       all 0.2s ease;
+  --ease-fast:  all 0.15s ease;
 }
 .theme-sepia {
   --b0: #f2e7ce;
